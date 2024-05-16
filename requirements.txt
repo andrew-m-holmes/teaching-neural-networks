@@ -1,0 +1,6 @@
+datasets
+jupyter
+numpy
+manim
+torch
+transformers
