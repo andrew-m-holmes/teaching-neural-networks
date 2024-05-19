@@ -2,5 +2,6 @@ datasets
 jupyter
 numpy
 manim
+matplotlib
 torch
 transformers
