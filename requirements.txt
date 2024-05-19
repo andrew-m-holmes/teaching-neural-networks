@@ -1,3 +1,4 @@
+bertviz
 datasets
 jupyter
 numpy
