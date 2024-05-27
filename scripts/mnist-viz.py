@@ -64,7 +64,7 @@ def plot_mini_batch_losses(train_losses, test_losses, batch_sizes, path):
     best_train_batch_size = min(avg_train_losses, key=avg_train_losses.get)
     best_test_batch_size = min(avg_test_losses, key=avg_test_losses.get)
 
-    fig, axes = plt.subplots(1, 2, figsize=(20, 5), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(23, 8), sharey=True)
 
     for i, batch_size in enumerate(batch_sizes):
         color = colors[i % len(colors)]
