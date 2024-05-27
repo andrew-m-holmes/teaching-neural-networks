@@ -50,9 +50,7 @@ def plot_training_times(batch_time, sgd_time, mini_batch_time, path):
     plt.show()
 
 
-def plot_mini_batch_losses(
-    train_losses, test_losses, batch_sizes, train_path, test_path
-):
+def plot_mini_batch_losses(train_losses, test_losses, batch_sizes, path):
     colors = ["dodgerblue", "red", "blueviolet", "aquamarine", "coral"]
     epochs = range(1, len(next(iter(train_losses.values()))) + 1)
 
@@ -66,40 +64,37 @@ def plot_mini_batch_losses(
     best_train_batch_size = min(avg_train_losses, key=avg_train_losses.get)
     best_test_batch_size = min(avg_test_losses, key=avg_test_losses.get)
 
-    plt.figure(figsize=(10, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(20, 5), sharey=True)
+
     for i, batch_size in enumerate(batch_sizes):
         color = colors[i % len(colors)]
-        linestyle = "-" if batch_size == best_train_batch_size else "--"
-        plt.plot(
+        linestyle_train = "-" if batch_size == best_train_batch_size else "--"
+        linestyle_test = "-" if batch_size == best_test_batch_size else "--"
+
+        axes[0].plot(
             epochs,
             train_losses[batch_size],
             label=f"Train Loss (Batch {batch_size})",
             color=color,
-            linestyle=linestyle,
+            linestyle=linestyle_train,
         )
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.legend(loc="upper right")
-    plt.style.use("dark_background")
-    plt.savefig(train_path, dpi=300)
-    plt.show()
-
-    plt.figure(figsize=(10, 5))
-    for i, batch_size in enumerate(batch_sizes):
-        color = colors[i % len(colors)]
-        linestyle = "-" if batch_size == best_test_batch_size else "--"
-        plt.plot(
+        axes[1].plot(
             epochs,
             test_losses[batch_size],
             label=f"Test Loss (Batch {batch_size})",
             color=color,
-            linestyle=linestyle,
+            linestyle=linestyle_test,
         )
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.legend(loc="upper right")
+
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].legend(loc="upper right")
+
+    axes[1].set_xlabel("Epoch")
+    axes[1].legend(loc="upper right")
+
     plt.style.use("dark_background")
-    plt.savefig(test_path, dpi=300)
+    plt.savefig(path, dpi=300)
     plt.show()
 
 
@@ -176,8 +171,7 @@ def main():
         train_losses,
         test_losses,
         batch_sizes,
-        "../images/train_loss_comparison.png",
-        "../images/test_loss_comparison.png",
+        "../images/mini_batch_loss_comp.png",
     )
 
 
