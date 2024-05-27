@@ -98,7 +98,6 @@ def plot_mini_batch_losses(
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.legend(loc="upper right")
-    plt.title("Testing Loss vs. Epoch for Different Mini-Batch Sizes")
     plt.style.use("dark_background")
     plt.savefig(test_path, dpi=300)
     plt.show()
