@@ -11,10 +11,27 @@ def plot_loss(train_loss, test_loss, path):
     plt.plot(epochs, test_loss, label="Testing Loss", color="red")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
+
+    final_train_loss = train_loss[-1]
+    final_test_loss = test_loss[-1]
+
+    textstr = f"Final Train Loss: {final_train_loss:.4f}\nFinal Test Loss: {final_test_loss:.4f}"
+
+    props = dict(boxstyle="round", facecolor="black", edgecolor="white", alpha=0.5)
+    plt.text(
+        0.95,
+        0.95,
+        textstr,
+        transform=plt.gca().transAxes,
+        fontsize=12,
+        verticalalignment="top",
+        horizontalalignment="right",
+        bbox=props,
+    )
+
     plt.legend(loc="upper left")
     plt.style.use("dark_background")
     plt.savefig(path, dpi=300)
-    plt.show()
 
 
 def plot_training_times(batch_time, sgd_time, mini_batch_time, path):
