@@ -12,16 +12,17 @@ This learning process that the majority of neural networks go through today is c
 ---
 Because of open source companies like [Hugging Face](), the amount of data available for a variety of domains has become ubiquitous. Essentially, we want to leverage or interpret this data for some particular purpose. Most often we're trying to find a correlation between the inputs and outputs of a dataset which has proven to be extremely useful for a wide range of tasks.
 
-For example, we might want to determine if a tumor is benign or malignant from radiology imaging, or determine the object(s) captured from the cameras of a self driving car so it react appropriately. With LLMs, we want to take in a chunk of text, semantically understand it, and give a reasonable response back based on the context. The common theme amongst these tasks is we want to accurately predict outputs from inputs. Neural networks enable us to achieve this objective in the form of *supervised learning*, or learning based on predicting the expected value of outputs from inputs given we know their ground truth.
+For example, we might want to determine if a tumor is benign or malignant from radiology imaging, or determine the object(s) captured from the cameras of a self driving car so it react appropriately. With LLMs, we want to take in a chunk of text, semantically understand it, and give a reasonable response back based on the context. The common theme amongst these tasks is we want to accurately predict outputs from inputs. Neural networks enable us to achieve this objective in the form of *supervised learning*, or learning based on predicting the expected value of outputs from inputs, given we know their ground truth.
 
 <h3 style="text-align: center;">GPT-2 Attention Mechanism</h3>
 
 ![attention-mechanism](https://github.com/andrew-m-holmes/teaching-networks/blob/main/scripts/attention-mechanism.gif?raw=true)
 
-> Above is the attention mechanism of the twelve attention heads found in the first layer of GPT-2—one the first large scale generative transformers. With the distinction made by color amongst the heads, how tokens (words/subwords) attend to one another (i.e. place importance on) other tokens can be interpreted based on the opacity of each head's color. From the depiction, it can be hypothesized that the model learned to correlate "pancakes", "eggs", and "oatmeal" with "breakfast", as they attend to it more than other tokens less related to the items. This ability to learn, evidently, is possible thanks to gradient descent. (Implementation courtesy of [bertviz]()).
+> Above is the attention mechanism of the twelve attention heads found in the first layer of GPT-2. Through gradient descent, each head can learn how to place importance on the right words, in turn, aiding the model in understanding prompts so it can generate a probable response back to the user. ([notebook](https://github.com/andrew-m-holmes/teaching-networks/blob/main/scripts/attention.ipynb)).
 
-## Understanding Our Toolbox
+## Eating Our Greens First
 ---
+Before we dive into gradient descent and optimizers, there's a little bit of background information and clarifications we should cover.
 
 # [NEURAL NETWORK MANIM]
 
@@ -106,16 +107,23 @@ where \\( X \\) and \\( Y \\) are the inputs and labels of a dataset respectivel
 
 <h3 style="text-align: center;">Batch Gradient Descent on MNIST</h3>
 
-![batch-gradient descent plot](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/batch_metrics.png?raw=true)
+![batch-gradient descent plot](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/batch_loss_metrics.png?raw=true)
 
-> Depicted above is the loss plotted during training of a 4 layer neural network on a subset (10,000 examples) of the MNIST handwritten digit dataset. The model was trained for 100 epochs (i.e. the amount of times the model sees the entire dataset) using cross entropy loss, and was tested on a subset of test examples (1,000 examples) using the same objective. From the plot, batch gradient descent is a little stagnant at first, but smoothens as it begins to converge to an optimum.
+> Depicted above is the loss plot of a neural network trained on a subset of the MNIST handwritten digit dataset. Looking at the plot, you can see batch gradient descent is a little stagnant at first, but smoothens as it begins to converge to an optimum. ([notebook](https://github.com/andrew-m-holmes/teaching-networks/blob/main/scripts/mnist.ipynb)).
 
-With this approach, gradient descent will always converge to a global minimum if the loss is convex and a local minimum otherwise. However, there's quite a few caveats. For one, we must pass the entire dataset to our model and loss function in one go; this is a cost in the computational departments of both speed* and memory. Furthermore, some examples are wasted on a given training step. Since the model will generate similar predictions for similar examples, their gradients will be roughly identical, and thus won't add any additional information to help the model learn.
+### Benefits: 
+- Converges to a global minimum if the loss is convex.
+  
+- Converges to a local minimum if the loss is non-convex.
 
-> *The environment in which computation is slow is under the assumption that no form of efficient paralleization is being used to generate model outputs. This environment is not as prevalent because of libraries like [numpy](https://numpy.org/doc/stable/index.html) and [PyTorch](https://pytorch.org/)—commonly used for ML workloads—which use [SIMD](https://en.wikipedia.org/wiki/Single_instruction,_multiple_data) and/or [CUDA](https://en.wikipedia.org/wiki/CUDA) to process data in parallel for incredibly fast compute. In spite of this, I felt it necessary to include this claim for conceptual reasons.
+### Caveats: 
+- The entire dataset must be passed to our model and loss function in one go. Without hardware acceleration, this introduces latency when training. Also, the entire dataset must be stored in memory, adding memory overhead and strain to a machine.
+
+- Some examples are wasted on a given training step. The model will generate similar predictions for similar examples causing their gradients to be roughly identical. This means the gradients won't add any additional information to help the model learn in its current state.
+
+- There's no support for *online-learning*—the ability to update the model after each new example seen in production. Some models deployed online, like [recommendation engines](), should improve overtime based on individual user interactions, but with batch gradient descent, this cannot be achieved which can degrade the performance of an ML application as the distribution of data shifts.
 
 # [CUDA OOM ERROR]
-Lastly, this variant of gradient does not support *online-learning*—the ability to update the model after each new example seen in production. Some models deployed online, like [recommendation engines](), should improve overtime based on individual user interactions, but with batch gradient descent, this cannot be achieved which can degrade the performance of an ML application as the distribution of data shifts.
 
 To wrap up, batch gradient descent is usually not used for the issues above, however, it's preferred when the dataset is relatively small—no more than 10,000 examples. The problems explained above can be addressed in the next variant of gradient descent.
 
@@ -130,17 +138,21 @@ where \\( x^{(i)} \\) and \\( y^{(i)} \\) are the \\( i\text{-th}\\) input and l
 
 <h3 style="text-align: center;">Stochastic Gradient Descent on MNIST</h3>
 
-![stochastic gradient descent plot](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/stochastic_metrics.png?raw=true)
+![stochastic gradient descent plot](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/sgd_loss_metrics.png?raw=true)
 
-> Represented above is the same training and evaluation procedures elaborated in the batch gradient descent depiction, however, using SGD. Unlike batch gradient descent, SGD is *"spikey"* as it trains and struggles to converge on the test loss—likely due to the frequency of stochastic updates.
+> Above is the same MNIST experiment from the batch gradient descent depiction, however, using SGD. SGD is *"spikey"* as it trains and struggles to converge on the test loss, yet SGD still outperforms batch gradient descent for this experiment in minimizing loss. ([notebook](https://github.com/andrew-m-holmes/teaching-networks/blob/main/scripts/mnist.ipynb)).
 
-The main benefit of this variant are the drawbacks of batch gradient descent corrected. It's much faster* and memory efficient because we don't have to feed nor store the entire dataset in memory before a training step is taken. Also, we're no longer wasting examples, in turn gradients because each gradient is specialized to a particular example and state of the model. This makes the updates more informative and also gives them the ability to get out of suboptimal minimums. Lastly, there's support for online learning as this variant is specialized to make parameter updates for each example.
+### Benefits: 
+- It's much faster (without hardware acceleration) and memory efficient because we don't have to feed or store the entire dataset in memory before a training step is taken.
+  
+- Examples are no longer wasted. As a result their gradients aren't wasted since each gradient is specialized to a particular example and state of the model. This makes the updates more informative and also gives them the ability to get out of suboptimal minimums.
+  
+- There's support for online learning as this variant is specialized to make parameter updates for each example.
 
-> *As explained before, this goes under the assumption that parellization was not used for efficient computations (explained in the batch gradient descent section).
+### Caveats: 
+- Every update is stochastic—random to say the least. This variance in gradients can make it difficult to interpret if the network is improving overtime since the loss has random *"spikes"* in the vertical direction.
 
-Like before, however, there's caveats. For one, every update is stochastic—random to say the least. This variance in gradients can make it difficult to interpret if the network is improving overtime since the loss has random *"spikes"* in different directions. Lastly, the parameters tend to osciallate around a minimum since the training steps are taken for each example, requiring the need to manually change the learning rate to converge.
-
-# [VARIANCE OF GRADIENTS OR OSCILLATION AROUND MINIMUM]
+- The parameters tend to osciallate around a minimum since training steps are taken for each example. This requires the need to manually decrease the learning rate so the model can converge.
 
 Altogether, SGD is a useful form of gradient descent, especially when online learning is required and the features of examples aren't as sparse. There's still room for improvement, in which we can bridge the benefits of batch gradient descent and SGD to give us a stable middle ground for training.
 
@@ -157,19 +169,62 @@ For better conceptualization, let \\( b = 64 \\) and \\( m = 1000 \\). The first
 
 <h3 style="text-align: center;">Mini-batch Gradient Descent on MNIST</h3>
 
-![min-batch gradient descent plot](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/mini_batch_metrics.png?raw=true)
+![min-batch gradient descent plot](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/mini_batch_512_loss_metrics.png?raw=true)
 
-> In the same constraints as the last two loss plots, depicted above is mini-batch gradient descent trained and evaluated on a subset of MNIST training and testing examples. Each mini-batch had 512 examples with exception to the last batch (272 examples). It can be viewed that mini-batch moves along the surface of the loss in a more controlled manner, and eventually converges towards a good minimum.
+> In the same environment as the former loss plots, above is MNIST learned using mini-batch gradient descent. It can be viewed that mini-batch moves along the surface of the loss in a more controlled manner, and eventually converges towards a good minimum, beating both batch and stochastic gradient descent when finding a optimum. ([notebook](https://github.com/andrew-m-holmes/teaching-networks/blob/main/scripts/mnist.ipynb)).
 
-The benefits of mini-batch gradient descent come from leveraging batch and stochastic gradient descent. Assuming an appropriate batch size was chosen, the training steps don't incur as much computational or memory overhead because the mini-batches are relatively small compared to the size of the entire dataset. In addition, we're not wasting examples because each update has a level of stochasticity. In a sense, we're capturing just enough information to learn but not so much that the information becomes redundant.
+### Benfits:
+- With the appropriate batch size, training steps don't incur as much computational or memory overhead because the mini-batches are relatively small compared to the size of the entire dataset.
 
-Continuing, the training steps aren't highly variant because more examples are incorporated per update, leading to more gradual steps taken towards the minimum. Lastly, the majority of machine learning frameworks develop kernels (software for hardware) specifically designed to handle batched computations, giving us *"more bank for our buck"* for computations.
+- Examples aren't wasted because each update has a level of stochasticity. In a sense, mini-batch gradient descent captures just enough information to learn but not so much that the information becomes redundant.
 
-# [TABLE OF WHAT VARIANT OF GRADIENT DESCENT TO USE BASED ON SCENARIO]
+- Training steps aren't highly variant (*spikey*) because more examples are incorporated per update, leading to more gradual steps towards the minimum.
 
-When it comes to training a model, mini-batch gradient descent is typically preferred for the reasons above. However, there are certain situations where you might prefer batch or stochastic over mini-batch gradient descent due to the constraints of the problem. 
+- May leverage specialized hardware that takes advanatage of batched (aggregated) data for highly paralleizable and accelerated computations. For example, frameworks/libraries used for ML, like [numpy](https://numpy.org/doc/stable/index.html) and [PyTorch](https://pytorch.org/), use [SIMD](https://en.wikipedia.org/wiki/Single_instruction,_multiple_data) and/or [CUDA](https://en.wikipedia.org/wiki/CUDA) to process data in parallel, making computations fast and efficient.
 
-> Note: mini-batch gradient descent is commonly called stochastic gradient descent because it's still stochastic in nature. If you've read documentation of certain machine learning libraries or papers, references to SGD is usually referring to mini-batch gradient descent unless explcitly stated otherwise. For the remainder of this blog, I will do the same.
+### Caveats:
+- The batch size hyperparameter may have a strong influence on a neural network's performance. Thus, it could require additional experiments and empirical evidence to select a batch size yielding the best performance.
+
+- At times, requires data augmentation like shuffling to keep the distrubtion of data within batches variant so that updates are informative.
+
+<h3 style="text-align: center;">Impact of Batch Size on Mini-batch Gradient Descent</h3>
+
+![mini_batch_loss_comp](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/mini_batch_loss_comp.png?raw=true)
+
+> Displayed is the loss for different selections of batch size (32, 64, 128, 256, and 512) on the MNIST training experiment. The smallest batch size (32) yielded the best performance in terms of average test loss compared to the other batch sizes. It's also interesting how the intermediate batch sizes (64, 128, and 256) are more unstable than batch sizes of 32 and 512. ([notebook](https://github.com/andrew-m-holmes/teaching-networks/blob/main/scripts/mnist.ipynb)).
+
+<h3 style="text-align: center;">Gradient Descent Training Times</h3>
+
+![training_times](https://github.com/andrew-m-holmes/teaching-networks/blob/main/images/training_times.png?raw=true)
+
+> Mentioned before, paralleization is often present due to the implementation of libraries used for ML workloads. This efficiency in hardware utilization makes computation faster the more data you can parallelize. As a matter of fact, batch was the fastest, mini-batch a close second, and stochastic gradient descent was the slowest when MNIST training was performed using an NVIDIA A10 GPU. This contradicts the expected order of runtime (1. SGD, 2. mini-batch, 3. batch) when hardware acceleration is absent.
+
+<h3 style="text-align: center;">Gradient Descent Variant Use Cases</h3>
+
+|       | Batch         | Stochastic    | Mini-batch    |
+|-------|---------------|---------------|---------------|
+| Usage | When the dataset is relatively small (i.e. \\( \le \\) 10,000 examples) and hardware acceleration is involved. | In the situation where online learning is necessary and when the dataset is not sparse. | When the dataset is relatively large (i.e. tens of thousands to millions of examples) and when hardware acceleration is being utilized. |
+
+> Note: Similar to cost and loss [function], SGD is synonymously used in place of mini-batch gradient descent—as mini-batch gradient descent is still stochastic in nature since it updates network parameter's more frequently than batch gradient descent. And like before, I'm going to use this generalization of the term to reflect how you'll often encounter it in articles and research papers.
+
+Having a basic understanding of how neural networks are taught via gradient descent, we can divulge into how we can improve how they learn through optimizers.
 
 ## Optimizers
 ---
+
+Optimizers do exactly what their name suggest—they optimize (improve), but why are they needed? When we covered gradient descent we talked about a few things:
+- Hyperparameters (e.g. learning rate and batch size).
+
+- The gradients of the loss w.r.t. the network's parameters.
+
+- Loss surface navigation and oscillations in regions of the loss (basically training steps).
+
+- Speed of training.
+
+All of these factors, and a lot more, strongly influence how a neural network converges during training. For simple and less complex tasks, like MNIST image classification, one of the three variants of gradient descent will likely get the job done for training. However, more intensive tasks require novel ideas.
+
+For example, the surface of the loss can be too complex such that navigating to the optimal region is impossible without additional heuristics. Continuing, we have to [carefully] choose hyperparameters, like the learning rate, through experimentation which can be time consuming—especially if powerful compute isn't available. Lastly, we have the ability to use past knowledge (gradients) to make better decisions when training, yet they're not leverage in any of the variants of gradient descent we discussed.
+
+You could probably already tell, but optimizers aim to solve these, and a lot more granular issues that are encountered when training neural networks. A more surface level way of thinking about it is that optimizers lift the burden of model training such that engineers can spend more time researching, designing, and evaluating models/methods.
+
+Now, there's a wide variety of optimizers used to help neural networks converge during gradient descent that I wont cover in this blog. However, I will go through what I believe to be the core optimizers that encapsulate the main function and purpose of them as a whole—**Stochastic Gradient Descent (SGD) with Momentum**, **RMSprop**, and **Adam**.
