@@ -7,31 +7,28 @@ def plot_loss(train_loss, test_loss, path):
     epochs = range(1, len(train_loss) + 1)
 
     plt.figure(figsize=(10, 5))
-    plt.plot(epochs, train_loss, label="Training Loss", color="dodgerblue")
-    plt.plot(epochs, test_loss, label="Testing Loss", color="red")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-
     final_train_loss = train_loss[-1]
     final_test_loss = test_loss[-1]
 
-    textstr = f"Final Train Loss: {final_train_loss:.4f}\nFinal Test Loss: {final_test_loss:.4f}"
-
-    props = dict(boxstyle="round", facecolor="black", edgecolor="white", alpha=0.5)
-    plt.text(
-        0.95,
-        0.95,
-        textstr,
-        transform=plt.gca().transAxes,
-        fontsize=12,
-        verticalalignment="top",
-        horizontalalignment="right",
-        bbox=props,
+    plt.plot(
+        epochs,
+        train_loss,
+        label=f"Training Loss: {final_train_loss:.4f}",
+        color="dodgerblue",
+    )
+    plt.plot(
+        epochs,
+        test_loss,
+        label=f"Testing Loss: {final_test_loss:.4f}",
+        color="red",
     )
 
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
     plt.legend(loc="upper left")
     plt.style.use("dark_background")
     plt.savefig(path, dpi=300)
+    plt.show()
 
 
 def plot_training_times(batch_time, sgd_time, mini_batch_time, path):
@@ -67,48 +64,29 @@ def plot_training_times(batch_time, sgd_time, mini_batch_time, path):
     plt.show()
 
 
-def plot_mini_batch_losses(train_losses, test_losses, batch_sizes, path):
+def plot_losses(losses, batch_sizes, path):
     colors = ["dodgerblue", "red", "blueviolet", "aquamarine", "coral"]
-    epochs = range(1, len(next(iter(train_losses.values()))) + 1)
+    epochs = range(1, len(next(iter(losses.values()))) + 1)
 
-    avg_train_losses = {
-        batch_size: np.mean(losses) for batch_size, losses in train_losses.items()
-    }
-    avg_test_losses = {
-        batch_size: np.mean(losses) for batch_size, losses in test_losses.items()
-    }
+    final_losses = {batch_size: loss[-1] for batch_size, loss in losses.items()}
+    best_batch_size = min(final_losses, key=final_losses.get)
 
-    best_train_batch_size = min(avg_train_losses, key=avg_train_losses.get)
-    best_test_batch_size = min(avg_test_losses, key=avg_test_losses.get)
-
-    fig, axes = plt.subplots(1, 2, figsize=(23, 8), sharey=True)
-
+    plt.figure(figsize=(12, 8))
     for i, batch_size in enumerate(batch_sizes):
         color = colors[i % len(colors)]
-        linestyle_train = "-" if batch_size == best_train_batch_size else "--"
-        linestyle_test = "-" if batch_size == best_test_batch_size else "--"
-
-        axes[0].plot(
+        linestyle = "-" if batch_size == best_batch_size else "--"
+        avg_loss = final_losses[batch_size]
+        plt.plot(
             epochs,
-            train_losses[batch_size],
-            label=f"Train Loss (Batch {batch_size})",
+            losses[batch_size],
+            label=f"Batch {batch_size} Loss: {avg_loss:.4f}",
             color=color,
-            linestyle=linestyle_train,
-        )
-        axes[1].plot(
-            epochs,
-            test_losses[batch_size],
-            label=f"Test Loss (Batch {batch_size})",
-            color=color,
-            linestyle=linestyle_test,
+            linestyle=linestyle,
         )
 
-    axes[0].set_xlabel("Epoch")
-    axes[0].set_ylabel("Loss")
-    axes[0].legend(loc="upper right")
-
-    axes[1].set_xlabel("Epoch")
-    axes[1].legend(loc="upper right")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend(loc="upper left")
 
     plt.style.use("dark_background")
     plt.savefig(path, dpi=300)
@@ -184,12 +162,9 @@ def main():
     }
 
     batch_sizes = [512, 256, 128, 64, 32]
-    plot_mini_batch_losses(
-        train_losses,
-        test_losses,
-        batch_sizes,
-        "../images/mini_batch_loss_comp.png",
-    )
+
+    plot_losses(train_losses, batch_sizes, "../images/mini_batch_train_loss_comp.png")
+    plot_losses(test_losses, batch_sizes, "../images/mini_batch_test_loss_comp.png")
 
 
 if __name__ == "__main__":
