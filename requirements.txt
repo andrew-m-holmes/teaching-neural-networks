@@ -4,5 +4,6 @@ jupyter
 numpy
 manim
 matplotlib
+scikit-learn
 torch
 transformers
