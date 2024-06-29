@@ -1,8 +1,8 @@
 bertviz
 datasets
 jupyter
+jupyterlab
 numpy
-manim
 matplotlib
 scikit-learn
 torch
