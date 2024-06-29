@@ -16,6 +16,8 @@ class ResNet(nn.Module):
             padding=3,
         )
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.batchnorm = nn.BatchNorm2d(layer_config[0][0])
+        self.relu = nn.ReLU()
         self.layers = nn.Sequential(
             OrderedDict(
                 {
@@ -46,7 +48,8 @@ class ResNet(nn.Module):
         self.linear = nn.Linear(512, 1000)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.maxpool(self.conv(x))
+        x = self.batchnorm(self.conv(x))
+        x = self.maxpool(self.relu(x))
         x = self.layers(x)
         x = torch.flatten(self.avgpool(x), start_dim=1)
         output = self.linear(x)
@@ -80,9 +83,7 @@ class Layer(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        global layer
-        output = self.blocks(x)
-        return output
+        return self.blocks(x)
 
 
 class Block(nn.Module):
@@ -108,11 +109,10 @@ class Block(nn.Module):
         self.projection = (
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=2)
             if projection
-            else lambda x: x
+            else nn.Identity()
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        global block
         skip = x
         x = self.relu1(self.batchnorm1(self.conv1(x)))
         residual = self.batchnorm2(self.conv2(x))
