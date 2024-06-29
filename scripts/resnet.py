@@ -25,7 +25,6 @@ class ResNet(nn.Module):
                         Layer(
                             in_channels,
                             out_channels,
-                            stride=1,
                             n_blocks=n_blocks,
                             projection=False,
                         )
@@ -33,7 +32,6 @@ class ResNet(nn.Module):
                         else Layer(
                             in_channels,
                             out_channels,
-                            stride=2,
                             n_blocks=n_blocks,
                             projection=True,
                         )
@@ -62,7 +60,6 @@ class Layer(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        stride: int,
         n_blocks: int,
         projection: bool = False,
     ) -> None:
@@ -71,11 +68,9 @@ class Layer(nn.Module):
             OrderedDict(
                 {
                     f"block_{b}": (
-                        Block(in_channels, out_channels, stride, projection)
+                        Block(in_channels, out_channels, projection)
                         if not b
-                        else Block(
-                            out_channels, out_channels, stride=1, projection=False
-                        )
+                        else Block(out_channels, out_channels, projection=False)
                     )
                     for b in range(n_blocks)
                 }
@@ -92,12 +87,15 @@ class Block(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        stride: int,
         projection: bool = False,
     ) -> None:
         super().__init__()
         self.conv1 = nn.Conv2d(
-            in_channels, out_channels, kernel_size=3, stride=stride, padding=1
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=2 if projection else 1,
+            padding=1,
         )
         self.batchnorm1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.ReLU()
@@ -105,12 +103,12 @@ class Block(nn.Module):
             out_channels, out_channels, kernel_size=3, stride=1, padding=1
         )
         self.batchnorm2 = nn.BatchNorm2d(out_channels)
-        self.relu2 = nn.ReLU()
         self.projection = (
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=2)
             if projection
             else nn.Identity()
         )
+        self.relu2 = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         skip = x
