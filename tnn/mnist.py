@@ -47,23 +47,16 @@ def main():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--path", type=str, default=".")
-    parser.add_argument("--verbose", type=bool, default=True)
+    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
     mnist = load_dataset("mnist", trust_remote_code=True)
     train, test = mnist.get("train"), mnist.get("test")
-
     train.set_format(type="numpy", columns=["image", "label"])
     test.set_format(type="numpy", columns=["image", "label"])
 
-    num_train_samples = 10000
-    num_test_samples = 1000
-    train_indices = np.random.choice(
-        num_train_samples, num_train_samples, replace=False
-    )
-    test_indices = np.random.choice(num_test_samples, num_test_samples, replace=False)
-    train = train.rename_column("image", "input").select(train_indices)
-    test = test.rename_column("image", "input").select(test_indices)
+    train = train.rename_column("image", "input")
+    test = test.rename_column("image", "input")
 
     train = train.map(preprocess)
     test = test.map(preprocess)
