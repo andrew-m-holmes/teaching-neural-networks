@@ -31,39 +31,6 @@ def plot_loss(train_loss, val_loss, path):
     plt.show()
 
 
-def plot_training_times(batch_time, sgd_time, mini_batch_time, path):
-    methods = ["Batch", "SGD", "Mini-batch"]
-    times = [batch_time, sgd_time, mini_batch_time]
-    colors = ["red", "dodgerblue", "blueviolet"]
-
-    plt.figure(figsize=(8, 5))
-    bars = plt.bar(methods, times, color=colors)
-
-    plt.xlabel("Gradient Descent Method")
-    plt.ylabel("Time (seconds)")
-    plt.yscale("log")
-    plt.style.use("dark_background")
-
-    plt.yticks(
-        [1, 10, 100, 1000, 10000, 100000], ["1", "10", "100", "1k", "10k", "100k"]
-    )
-
-    for bar, time in zip(bars, times):
-        plt.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() / 2,
-            f"{time:.0f}",
-            ha="center",
-            va="center",
-            color="black",
-            fontsize=12,
-            fontweight="bold",
-        )
-
-    plt.savefig(path, dpi=300)
-    plt.show()
-
-
 def plot_losses(losses, batch_sizes, path):
     colors = ["dodgerblue", "red", "blueviolet", "aquamarine", "coral"]
     epochs = range(1, len(next(iter(losses.values()))) + 1)
@@ -99,39 +66,26 @@ def load_metrics(file_path):
     return train_loss, val_loss
 
 
-def load_times(file_path):
-    with open(file_path, "rb") as file:
-        elasped_time = pickle.load(file)
-    return elasped_time
-
-
 def main():
-
     path = os.path.abspath(os.path.dirname(__file__))
-
     plt.style.use("dark_background")
 
     batch_train_loss, batch_val_loss = load_metrics(f"{path}/data/batch_metrics.pkl")
-    batch_time = load_times(f"{path}/data/batch_time.pkl")
 
     sgd_train_loss, sgd_val_loss = load_metrics(f"{path}/data/stochastic_metrics.pkl")
-    sgd_time = load_times(f"{path}/data/stochastic_time.pkl")
 
     mini_batch_512_train_loss, mini_batch_512_val_loss = load_metrics(
         f"{path}/data/mini_batch_512_metrics.pkl"
     )
-    mini_batch_512_time = load_times(f"{path}/data/mini_batch_512_time.pkl")
 
-    plot_loss(batch_train_loss, batch_val_loss, f"{path}/../images/batch_loss_metrics.png")
+    plot_loss(
+        batch_train_loss, batch_val_loss, f"{path}/../images/batch_loss_metrics.png"
+    )
     plot_loss(sgd_train_loss, sgd_val_loss, f"{path}/../images/sgd_loss_metrics.png")
     plot_loss(
         mini_batch_512_train_loss,
         mini_batch_512_val_loss,
         f"{path}./images/mini_batch_512_loss_metrics.png",
-    )
-
-    plot_training_times(
-        batch_time, sgd_time, mini_batch_512_time, f"{path}/../images/training_times.png"
     )
 
     mini_batch_256_train_loss, mini_batch_256_val_loss = load_metrics(
@@ -165,8 +119,12 @@ def main():
 
     batch_sizes = [512, 256, 128, 64, 32]
 
-    plot_losses(train_losses, batch_sizes, f"{path}/../images/mini_batch_train_loss_comp.png")
-    plot_losses(val_losses, batch_sizes, f"{path}/../images/mini_batch_val_loss_comp.png")
+    plot_losses(
+        train_losses, batch_sizes, f"{path}/../images/mini_batch_train_loss_comp.png"
+    )
+    plot_losses(
+        val_losses, batch_sizes, f"{path}/../images/mini_batch_val_loss_comp.png"
+    )
 
 
 if __name__ == "__main__":
