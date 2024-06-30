@@ -59,8 +59,8 @@ for i in range(grid_size):
         w_new = torch.tensor([[W[i, j], w_init], [w_init, w_init]], requires_grad=True)
         v_new = torch.tensor([V[i, j], v_init], requires_grad=True)
         with torch.no_grad():
-            model.fc.weight = nn.Parameter(w_new)
-            model.fc.bias = nn.Parameter(v_new)
+            model.fc.weight = nn.Parameter(w_new.float())
+            model.fc.bias = nn.Parameter(v_new.float())
         outputs = model(X)
         loss = criterion(outputs, y)
         loss_grid[i, j] = loss.item()
