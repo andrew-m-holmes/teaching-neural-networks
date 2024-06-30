@@ -1,5 +1,6 @@
 import pickle
 import matplotlib.pyplot as plt
+import os
 
 
 def plot_loss(train_loss, val_loss, path):
@@ -106,42 +107,44 @@ def load_times(file_path):
 
 def main():
 
+    path = os.path.abspath(os.path.dirname(__file__))
+
     plt.style.use("dark_background")
 
-    batch_train_loss, batch_val_loss = load_metrics("./data/batch_metrics.pkl")
-    batch_time = load_times("./data/batch_time.pkl")
+    batch_train_loss, batch_val_loss = load_metrics(f"{path}/data/batch_metrics.pkl")
+    batch_time = load_times(f"{path}/data/batch_time.pkl")
 
-    sgd_train_loss, sgd_val_loss = load_metrics("./data/stochastic_metrics.pkl")
-    sgd_time = load_times("./data/stochastic_time.pkl")
+    sgd_train_loss, sgd_val_loss = load_metrics(f"{path}/data/stochastic_metrics.pkl")
+    sgd_time = load_times(f"{path}/data/stochastic_time.pkl")
 
     mini_batch_512_train_loss, mini_batch_512_val_loss = load_metrics(
-        "./data/mini_batch_512_metrics.pkl"
+        f"{path}/data/mini_batch_512_metrics.pkl"
     )
-    mini_batch_512_time = load_times("./data/mini_batch_512_time.pkl")
+    mini_batch_512_time = load_times(f"{path}/data/mini_batch_512_time.pkl")
 
-    plot_loss(batch_train_loss, batch_val_loss, "../images/batch_loss_metrics.png")
-    plot_loss(sgd_train_loss, sgd_val_loss, "../images/sgd_loss_metrics.png")
+    plot_loss(batch_train_loss, batch_val_loss, f"{path}/../images/batch_loss_metrics.png")
+    plot_loss(sgd_train_loss, sgd_val_loss, f"{path}/../images/sgd_loss_metrics.png")
     plot_loss(
         mini_batch_512_train_loss,
         mini_batch_512_val_loss,
-        "../images/mini_batch_512_loss_metrics.png",
+        f"{path}./images/mini_batch_512_loss_metrics.png",
     )
 
     plot_training_times(
-        batch_time, sgd_time, mini_batch_512_time, "../images/training_times.png"
+        batch_time, sgd_time, mini_batch_512_time, f"{path}/../images/training_times.png"
     )
 
     mini_batch_256_train_loss, mini_batch_256_val_loss = load_metrics(
-        "./data/mini_batch_256_metrics.pkl"
+        f"{path}/data/mini_batch_256_metrics.pkl"
     )
     mini_batch_128_train_loss, mini_batch_128_val_loss = load_metrics(
-        "./data/mini_batch_128_metrics.pkl"
+        f"{path}/data/mini_batch_128_metrics.pkl"
     )
     mini_batch_64_train_loss, mini_batch_64_val_loss = load_metrics(
-        "./data/mini_batch_64_metrics.pkl"
+        f"{path}/data/mini_batch_64_metrics.pkl"
     )
     mini_batch_32_train_loss, mini_batch_32_val_loss = load_metrics(
-        "./data/mini_batch_32_metrics.pkl"
+        f"{path}/data/mini_batch_32_metrics.pkl"
     )
 
     train_losses = {
@@ -162,8 +165,8 @@ def main():
 
     batch_sizes = [512, 256, 128, 64, 32]
 
-    plot_losses(train_losses, batch_sizes, "../images/mini_batch_train_loss_comp.png")
-    plot_losses(val_losses, batch_sizes, "../images/mini_batch_val_loss_comp.png")
+    plot_losses(train_losses, batch_sizes, f"{path}/../images/mini_batch_train_loss_comp.png")
+    plot_losses(val_losses, batch_sizes, f"{path}/../images/mini_batch_val_loss_comp.png")
 
 
 if __name__ == "__main__":
