@@ -28,7 +28,6 @@ def plot_loss(train_loss, val_loss, path):
     plt.legend(loc="upper left")
     plt.style.use("dark_background")
     plt.savefig(path, dpi=300)
-    plt.show()
 
 
 def plot_losses(losses, batch_sizes, path):
@@ -57,7 +56,6 @@ def plot_losses(losses, batch_sizes, path):
 
     plt.style.use("dark_background")
     plt.savefig(path, dpi=300)
-    plt.show()
 
 
 def load_metrics(file_path):
@@ -68,14 +66,15 @@ def load_metrics(file_path):
 
 def main():
     path = os.path.abspath(os.path.dirname(__file__))
+    print(path)
     plt.style.use("dark_background")
 
-    batch_train_loss, batch_val_loss = load_metrics(f"{path}/data/batch_metrics.pkl")
+    batch_train_loss, batch_val_loss = load_metrics(f"{path}/metrics/batch_metrics.pkl")
 
-    sgd_train_loss, sgd_val_loss = load_metrics(f"{path}/data/stochastic_metrics.pkl")
+    sgd_train_loss, sgd_val_loss = load_metrics(f"{path}/metrics/sgd_metrics.pkl")
 
     mini_batch_512_train_loss, mini_batch_512_val_loss = load_metrics(
-        f"{path}/data/mini_batch_512_metrics.pkl"
+        f"{path}/metrics/mini-batch_512_metrics.pkl"
     )
 
     plot_loss(
@@ -85,20 +84,20 @@ def main():
     plot_loss(
         mini_batch_512_train_loss,
         mini_batch_512_val_loss,
-        f"{path}./images/mini_batch_512_loss_metrics.png",
+        f"{path}./images/mini-batch_512_loss_metrics.png",
     )
 
     mini_batch_256_train_loss, mini_batch_256_val_loss = load_metrics(
-        f"{path}/data/mini_batch_256_metrics.pkl"
+        f"{path}/metrics/mini-batch_256_metrics.pkl"
     )
     mini_batch_128_train_loss, mini_batch_128_val_loss = load_metrics(
-        f"{path}/data/mini_batch_128_metrics.pkl"
+        f"{path}/metrics/mini-batch_128_metrics.pkl"
     )
     mini_batch_64_train_loss, mini_batch_64_val_loss = load_metrics(
-        f"{path}/data/mini_batch_64_metrics.pkl"
+        f"{path}/metrics/mini-batch_64_metrics.pkl"
     )
     mini_batch_32_train_loss, mini_batch_32_val_loss = load_metrics(
-        f"{path}/data/mini_batch_32_metrics.pkl"
+        f"{path}/metrics/mini-batch_32_metrics.pkl"
     )
 
     train_losses = {
@@ -120,10 +119,10 @@ def main():
     batch_sizes = [512, 256, 128, 64, 32]
 
     plot_losses(
-        train_losses, batch_sizes, f"{path}/../images/mini_batch_train_loss_comp.png"
+        train_losses, batch_sizes, f"{path}/../images/mini-batch_train_loss_comp.png"
     )
     plot_losses(
-        val_losses, batch_sizes, f"{path}/../images/mini_batch_val_loss_comp.png"
+        val_losses, batch_sizes, f"{path}/../images/mini-batch_val_loss_comp.png"
     )
 
 

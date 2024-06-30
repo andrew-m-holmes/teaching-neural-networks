@@ -1,13 +1,18 @@
 import torch
 import torch.nn as nn
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from collections import OrderedDict
 
 
 class ResNet(nn.Module):
+    _layer_config = [(64, 64, 3), (64, 128, 4), (128, 256, 5), (256, 512, 3)]
 
-    def __init__(self, layer_config: List[Tuple[int, int, int]]) -> None:
+    def __init__(
+        self, layer_config: Optional[List[Tuple[int, int, int]]] = None
+    ) -> None:
         super().__init__()
+        if layer_config is None:
+            layer_config = self._layer_config
         self.conv = nn.Conv2d(
             in_channels=3,
             out_channels=layer_config[0][0],
