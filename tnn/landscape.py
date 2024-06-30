@@ -52,8 +52,8 @@ loss_grid = np.zeros((grid_size, grid_size))
 # Compute the loss for each point in the grid
 for i in range(grid_size):
     for j in range(grid_size):
-        w_new = torch.tensor(w, requires_grad=True)
-        v_new = torch.tensor(v, requires_grad=True)
+        w_new = torch.tensor(w)
+        v_new = torch.tensor(v)
         w_new[0, 0, 0, 0] = W[i, j]
         v_new[0] = V[i, j]
         with torch.no_grad():
