@@ -44,6 +44,7 @@ def main():
         "--variant", type=str, choices=["batch", "mini-batch", "sgd"], required=True
     )
     parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=1e-1)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--path", type=str, default=".")
@@ -94,7 +95,7 @@ def main():
     )
 
     model = Model()
-    optimizer = optim.SGD(model.parameters(), lr=1e-1, momentum=0)
+    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0)
     if args.verbose:
         print(f"SGD Variant: {args.variant.capitalize()}")
 
