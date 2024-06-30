@@ -122,9 +122,10 @@ def main():
         if args.verbose:
             print(f"Writing to {args.path}")
         path = args.path
-        with open(f"{path}/{args.variant}_metrics.pkl", "wb") as file:
+        batch_size_tag = f"_{batch_size}" if args.variant == "mini-batch" else ""
+        with open(f"{path}/{args.variant}{batch_size_tag}_metrics.pkl", "wb") as file:
             pickle.dump((train_loss, test_loss), file)
-        with open(f"{path}/{args.variant}_time.pkl", "wb") as file:
+        with open(f"{path}/{args.variant}{batch_size_tag}_time.pkl", "wb") as file:
             pickle.dump(elapsed_time, file)
 
 
