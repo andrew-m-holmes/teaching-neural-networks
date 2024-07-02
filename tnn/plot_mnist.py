@@ -84,7 +84,7 @@ def main():
     plot_loss(
         mini_batch_512_train_loss,
         mini_batch_512_val_loss,
-        f"{path}./images/mini-batch_512_loss_metrics.png",
+        f"{path}/../images/mini-batch_512_loss_metrics.png",
     )
 
     mini_batch_256_train_loss, mini_batch_256_val_loss = load_metrics(
