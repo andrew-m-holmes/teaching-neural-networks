@@ -28,7 +28,9 @@ from datasets import load_dataset
 with open("./.token.txt", mode="r") as file:
     token = file.readline().strip()
 
-imagenet = load_dataset("ILSVRC/imagenet-1k", token=token, num_proc=1, trust_remote_code=True)
+imagenet = load_dataset(
+    "ILSVRC/imagenet-1k", token=token, num_proc=1, trust_remote_code=True
+)
 
 
 # In[14]:
@@ -43,14 +45,17 @@ val = val.select(np.random.choice(1000, 1000, replace=False))
 
 
 def pre_process(example):
-    transforms = v2.Compose([
-        v2.Resize(256),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    transforms = v2.Compose(
+        [
+            v2.Resize(256),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
     example["input"] = transforms(example["image"])
     return example
+
 
 train = train.map(pre_process, batched=True, batch_size=256, num_proc=1)
 val = val.map(pre_process, batched=True, batch_size=256, num_proc=1)
@@ -63,10 +68,9 @@ val.set_format(type="pt", columns=["input", "label"], output_all_columns=True)
 
 
 def collate_fn(batch):
-    augmentor = v2.Compose([
-        v2.RandomHorizontalFlip(p=0.5),
-        v2.RandomCrop(size=(224, 224))
-    ])
+    augmentor = v2.Compose(
+        [v2.RandomHorizontalFlip(p=0.5), v2.RandomCrop(size=(224, 224))]
+    )
     batch_size = len(batch)
     inputs = [batch[i]["input"] for i in range(batch_size)]
     labels = torch.tensor([batch[i]["label"] for i in range(batch_size)]).long()
@@ -74,10 +78,18 @@ def collate_fn(batch):
     inputs = torch.stack(inputs, dim=0)
     return inputs, labels
 
+
 batch_size = 256
 drop_last = False
 shuffle = True
-train_loader = data.DataLoader(train, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last, collate_fn=collate_fn, num_workers=4)
+train_loader = data.DataLoader(
+    train,
+    batch_size=batch_size,
+    shuffle=shuffle,
+    drop_last=drop_last,
+    collate_fn=collate_fn,
+    num_workers=4,
+)
 
 
 # In[7]:
@@ -85,4 +97,3 @@ train_loader = data.DataLoader(train, batch_size=batch_size, shuffle=shuffle, dr
 
 layer_config = [(64, 64, 3), (64, 128, 4), (128, 256, 5), (256, 512, 3)]
 model = ResNet(layer_config)
-
