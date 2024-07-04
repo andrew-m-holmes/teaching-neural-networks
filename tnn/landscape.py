@@ -1,19 +1,23 @@
-import torch
-import torch.nn as nn
 import numpy as np
-from tnn.resnet import ResNet
-from typing import List
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 
-def flatten_params(model: nn.Module) -> List[torch.Tensor]:
-    with torch.no_grad():
-        return [p.flatten() for p in model.parameters() if p.requires_grad]
+def f(x, y):
+    return x**2 + y**2
 
 
 def main():
-    resnet = ResNet()
-    params = flatten_params(resnet)
-    print(len(params))
+
+    x = np.linspace(-4, 4, 100)
+    y = np.linspace(-4, 4, 100)
+    xv, yv = np.meshgrid(x, y)
+    z = f(xv, yv)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(x, y, z, cmap="cool")
+    plt.show()
 
 
 if __name__ == "__main__":
