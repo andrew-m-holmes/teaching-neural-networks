@@ -1,8 +1,11 @@
 import os
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from typing import Tuple
+
+matplotlib.use("TkAgg")  # fow WSL
 
 
 def f(x: np.ndarray, a: float, b: float) -> np.ndarray:
@@ -65,7 +68,9 @@ def main():
         return (scatter,)
 
     path = os.path.abspath(os.path.dirname(__file__))
-    anim = FuncAnimation(fig, update, frames=iters, interval=200, blit=True, repeat=False)
+    anim = FuncAnimation(
+        fig, update, frames=iters, interval=200, blit=True, repeat=False
+    )
     anim.save(f"{path}/../images/grad-descent-anim.gif", writer="pillow", fps=5)
 
 
