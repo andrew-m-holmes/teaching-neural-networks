@@ -4,3 +4,4 @@ venv
 .token.txt
 *.egg-info
 *DS_Store
+*.pt

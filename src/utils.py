@@ -9,8 +9,8 @@ def train(
     model: nn.Module,
     optimizer: optim.Optimizer,
     loss_fn: nn.modules.loss._Loss,
-    train_dataloader: data.DataLoader,
-    eval_dataloader: Optional[data.DataLoader] = None,
+    trainloader: data.DataLoader,
+    testloader: Optional[data.DataLoader] = None,
     epochs: int = 10,
     device: Optional[str] = None,
     verbose: bool = False,
@@ -27,7 +27,7 @@ def train(
         train_loss = 0
         model.train()
 
-        for inputs, labels in train_dataloader:
+        for inputs, labels in trainloader:
             inputs, labels = inputs.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True
             )
@@ -39,23 +39,11 @@ def train(
             optimizer.step()
             train_loss += loss.item()
 
-        if eval_dataloader is not None:
-            eval_loss = 0
-            model.eval()
-            with torch.no_grad():
-                for inputs, labels in eval_dataloader:
-                    inputs, labels = inputs.to(device, non_blocking=True), labels.to(
-                        device, non_blocking=True
-                    )
-
-                    outputs = model(inputs)
-                    loss = loss_fn(outputs, labels)
-                    eval_loss += loss.item()
-
-            eval_loss /= len(eval_dataloader)
+        if testloader is not None:
+            eval_loss = test(model, loss_fn, testloader, device, verbose=False)
             eval_losses.append(eval_loss)
 
-        train_loss /= len(train_dataloader)
+        train_loss /= len(trainloader)
         train_losses.append(train_loss)
         if verbose and epoch and ((epoch + 1) % int(epochs * 0.25) == 0):
             print(
@@ -65,3 +53,29 @@ def train(
     if verbose:
         print("Training is complete")
     return train_losses, eval_losses
+
+
+def test(
+    model: nn.Module,
+    loss_fn: nn.modules.loss._Loss,
+    testloader: data.DataLoader,
+    device: Optional[str] = None,
+    verbose: bool = False,
+) -> float:
+    if verbose:
+        print("Testing started")
+    test_loss = 0
+    model.eval().to(device)
+
+    with torch.no_grad():
+        for inputs, labels in testloader:
+            inputs, labels = inputs.to(device, non_blocking=True), labels.to(
+                device, non_blocking=True
+            )
+            outputs = model(inputs)
+            loss = loss_fn(outputs, labels)
+            test_loss += loss.item()
+
+    test_loss /= len(testloader)
+    print(f"Testing complete, loss: {test_loss:.4f}")
+    return test_loss
