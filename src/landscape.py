@@ -26,7 +26,6 @@ def main():
     A = np.linspace(-1, 1, size)
     B = np.linspace(-1, 1, size)
     x = abs(np.random.randn(features))
-    y = abs(np.random.randn(features))
 
     a, b = np.meshgrid(A, B)
     z = np.zeros((size, size))

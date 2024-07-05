@@ -8,8 +8,9 @@ from typing import Tuple, List, Optional
 def train(
     model: nn.Module,
     optimizer: optim.Optimizer,
+    loss_fn: nn.modules.loss._Loss,
     train_dataloader: data.DataLoader,
-    eval_dataloader: data.DataLoader,
+    eval_dataloader: Optional[data.DataLoader] = None,
     epochs: int = 10,
     device: Optional[str] = None,
     verbose: bool = False,
@@ -18,9 +19,9 @@ def train(
         print("Training has started")
 
     model = model.to(device)
-    loss_fn = nn.CrossEntropyLoss()
     train_losses = []
     eval_losses = []
+    eval_loss = None
 
     for epoch in range(epochs):
         train_loss = 0
@@ -30,6 +31,7 @@ def train(
             inputs, labels = inputs.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True
             )
+
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = loss_fn(outputs, labels)
@@ -37,25 +39,28 @@ def train(
             optimizer.step()
             train_loss += loss.item()
 
-        eval_loss = 0
-        model.eval()
-        with torch.no_grad():
-            for inputs, labels in eval_dataloader:
-                inputs, labels = inputs.to(device, non_blocking=True), labels.to(
-                    device, non_blocking=True
-                )
+        if eval_dataloader is not None:
+            eval_loss = 0
+            model.eval()
+            with torch.no_grad():
+                for inputs, labels in eval_dataloader:
+                    inputs, labels = inputs.to(device, non_blocking=True), labels.to(
+                        device, non_blocking=True
+                    )
 
-                outputs = model(inputs)
-                loss = loss_fn(outputs, labels)
-                eval_loss += loss.item()
+                    outputs = model(inputs)
+                    loss = loss_fn(outputs, labels)
+                    eval_loss += loss.item()
+
+            eval_loss /= len(eval_dataloader)
+            eval_losses.append(eval_loss)
 
         train_loss /= len(train_dataloader)
-        eval_loss /= len(eval_dataloader)
         train_losses.append(train_loss)
-        eval_losses.append(eval_loss)
         if verbose and epoch and ((epoch + 1) % int(epochs * 0.25) == 0):
             print(
-                f"Epoch {epoch + 1} complete, train loss: {train_loss:.3f}, eval loss: {eval_loss:.3f}"
+                f"Epoch {epoch + 1} complete, train loss: {train_loss:.3f}"
+                + (f", eval loss: {eval_loss:.3f}" if eval_loss is not None else "")
             )
     if verbose:
         print("Training is complete")
