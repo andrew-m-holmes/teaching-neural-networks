@@ -77,5 +77,6 @@ def test(
             test_loss += loss.item()
 
     test_loss /= len(testloader)
-    print(f"Testing complete, loss: {test_loss:.4f}")
+    if verbose:
+        print(f"Testing complete, loss: {test_loss:.4f}")
     return test_loss

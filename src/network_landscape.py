@@ -1,14 +1,14 @@
 import os
-import sys
-import numpy as np
+import time
 import torch
 import torch.nn as nn
 import torch.utils.data as data
-import torch.optim as optim
+import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from src.utils import train, test
+from copy import deepcopy
+from src.utils import test
 from datasets import load_dataset
 from matplotlib.animation import FuncAnimation
 
@@ -49,49 +49,39 @@ def collate(examples):
     return inputs.squeeze().float(), labels.squeeze().long()
 
 
-def flat_concat_params(model):
-    return torch.concat(
-        [
-            param.detach().flatten()
-            for param in model.parameters()
-            if isinstance(param, nn.Parameter)
-        ]
-    )
+def paramflat(model):
+    return torch.concat([p.clone().detach().flatten() for p in model.parameters()])
 
 
-def apply_perturbation(model, theta, delta, eta, alpha, beta):
-    pert = theta + delta * alpha + beta * eta
+def filternorm(vector, parameters):
+    vnorm = vector.norm()
+    pnorm = parameters.norm()
+    return vector * (pnorm / vnorm)
+
+
+@torch.no_grad
+def setparams(model, parameters, clone=True):
+    if clone:
+        model = deepcopy(model)
     start = 0
-    with torch.no_grad():
-        for param in model.parameters():
-            end = start + param.numel()
-            tensor = pert[start:end]
-            param.copy_(tensor.reshape(tuple(param.size())))
-            start = end
-
-
-def project_onto(d, w):
-    return torch.dot(d, w) / d.norm()
+    for p in model.parameters():
+        end = start + p.numel()
+        p.copy_(parameters[start:end].reshape(*p.size()))
+    return model
 
 
 def main():
-    training = True if len(sys.argv) > 1 and sys.argv[1] == "--train".strip() else False
 
-    size = 1000
-    indices = np.random.choice(size, size, replace=False)
-    mnist = load_dataset("mnist", trust_remote_code=True)
-
-    trainset, testset = mnist.get("train").select(indices), mnist.get("test").select(
-        indices
+    samples = 100
+    testset = load_dataset("ylecun/mnist", split="test").select(
+        np.random.choice(samples, samples, replace=False)
     )
-    trainset, testset = trainset.rename_column("image", "input"), testset.rename_column(
-        "image", "input"
+    testset = testset.rename_column("image", "input")
+    testset = testset.map(preprocess, num_proc=4)
+    testset.set_format("torch", columns=["input", "label"])
+    testloader = data.DataLoader(
+        testset, batch_size=samples, pin_memory=True, num_workers=4, collate_fn=collate
     )
-    trainset, testset = trainset.map(preprocess, num_proc=4), testset.map(
-        preprocess, num_proc=4
-    )
-    trainset.set_format(type="torch", columns=["input", "label"])
-    testset.set_format(type="torch", columns=["input", "label"])
 
     device = (
         "cuda"
@@ -100,84 +90,58 @@ def main():
     )
 
     model = TinyNet()
-    loss_fn = nn.CrossEntropyLoss()
+    model.load_state_dict(torch.load(f"{PATH}/{FILENAME}", map_location="cpu"))
+    lossfn = nn.CrossEntropyLoss()
+    theta = paramflat(model).to(device)
+    directions = torch.randn_like(theta, device=device), torch.randn_like(
+        theta, device=device
+    )
+    delta = filternorm(directions[0], theta)
+    eta = filternorm(directions[1], theta)
 
-    dataloader = data.DataLoader(
-        trainset,
-        batch_size=32,
-        drop_last=False,
-        shuffle=True,
-        collate_fn=collate,
-        pin_memory=True,
-        num_workers=4,
+    granulairty = 10
+    A = torch.linspace(-0.1, 0.1, granulairty, device=device)
+    B = torch.linspace(-0.1, 0.1, granulairty, device=device)
+    alpha, beta = torch.meshgrid(A, B, indexing="ij")
+    losses = torch.zeros(granulairty * granulairty)
+    newparams = (
+        theta.unsqueeze(0)
+        + alpha.reshape(-1, 1) * delta.unsqueeze(0)
+        + beta.reshape(-1, 1) * eta.unsqueeze(0)
     )
 
-    testloader = data.DataLoader(
-        trainset,
-        batch_size=size,
-        drop_last=False,
-        shuffle=True,
-        collate_fn=collate,
-        pin_memory=True,
-        num_workers=4,
-    )
+    print("Landscape generating...")
+    start = time.perf_counter()
+    torch.cuda.empty_cache()
+    for i in range(newparams.size(0)):
+        parameters = newparams[i]
+        model = setparams(model, parameters, clone=False)
+        loss = test(model, lossfn, testloader, device=device, verbose=False)
+        losses[i] = loss
+    # for i in range(granulairty):
+    #     for j in range(granulairty):
+    #         newparams = theta + alpha[i, j] * delta + beta[i, j] * eta
+    #         model = setparams(model, newparams, clone=True)
+    #         loss = test(model, lossfn, testloader, device=device, verbose=False)
+    #         losses[i, j] = loss
+    end = time.perf_counter()
+    print(f"Elasped time: {(end - start):.2f} seconds")
 
-    if training:
-        epochs = 150
-        optimizer = optim.SGD(model.parameters(), momentum=0.9, weight_decay=1e-3)
-        _, _ = train(
-            model,
-            optimizer,
-            loss_fn,
-            dataloader,
-            testloader,
-            epochs=epochs,
-            device=device,
-            verbose=True,
-        )
+    a = alpha.cpu().numpy()
+    b = beta.cpu().numpy()
+    z = losses.cpu().numpy().reshape(granulairty, granulairty)
 
-        if not os.path.exists(PATH):
-            os.mkdir(PATH)
-        torch.save(model.cpu().state_dict(), f=f"{PATH}/{FILENAME}")
-        print("Model saved")
-
-    else:
-        state_dict = torch.load(f"{PATH}/{FILENAME}", map_location="cpu")
-        model.load_state_dict(state_dict)
-        print("Model loaded")
-
-    theta = flat_concat_params(model).to(device)
-    delta = torch.randn_like(theta).to(device)
-    eta = torch.randn_like(theta).to(device)
-
-    points = 100
-    A = np.linspace(-1, 1, points)
-    B = np.linspace(-1, 1, points)
-    a, b = np.meshgrid(A, B)
-
-    a_tensor, b_tensor = torch.from_numpy(a).float().to(device), torch.from_numpy(
-        b
-    ).float().to(device)
-    z = torch.zeros((points, points)).to(device)
-
-    for i in range(points):
-        for j in range(points):
-            alpha, beta = a_tensor[i, j], b_tensor[i, j]
-            apply_perturbation(model, theta, delta, eta, alpha, beta)
-            z[i, j] = test(model, loss_fn, testloader, device, verbose=True)
+    paramrange = (-0.2, 0.2)
+    lossrange = (0.0, 2.0)
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
-    param_range = (-1.5, 1.5)
-    z = z.cpu().numpy()
-    loss_range = (z.min() - 0.5, z.max() + 0.5)
-
-    plt.xlabel("a")
-    plt.ylabel("b")
+    plt.xlabel("alpha")
+    plt.ylabel("beta")
     ax.set_zlabel("loss")
-    ax.set_xlim(param_range)
-    ax.set_ylim(param_range)
-    ax.set_zlim(loss_range)
+    ax.set_xlim(paramrange)
+    ax.set_ylim(paramrange)
+    ax.set_zlim(lossrange)
     ax.plot_surface(a, b, z, cmap="viridis", alpha=0.5)
     plt.show()
 
