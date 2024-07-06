@@ -49,25 +49,48 @@ def collate(examples):
     return inputs.squeeze().float(), labels.squeeze().long()
 
 
-def paramflat(model):
-    return torch.concat([p.clone().detach().flatten() for p in model.parameters()])
+def genrandvecs(model):
+    thetas = [p.detach().clone().flatten() for p in model.parameters()]
+    deltas, etas = [], []
+
+    for theta in thetas:
+        vecx, vecy = filternorm(theta), filternorm(theta)
+        deltas.append(vecx)
+        etas.append(vecy)
+
+    assert len(thetas) == len(deltas) == len(etas)
+    return thetas, deltas, etas
 
 
-def filternorm(vector, parameters):
-    vnorm = vector.norm()
-    pnorm = parameters.norm()
-    return vector * (pnorm / vnorm)
+def filternorm(flatparams):
+    vec = torch.randn_like(flatparams)
+    vec *= flatparams.norm() / vec.norm()
+    return vec
 
 
-@torch.no_grad
-def setparams(model, parameters, clone=True):
-    if clone:
-        model = deepcopy(model)
-    start = 0
-    for p in model.parameters():
-        end = start + p.numel()
-        p.copy_(parameters[start:end].reshape(*p.size()))
-    return model
+def genminimizer(thetas, deltas, etas, alpha, beta):
+    thetahats = []
+
+    for theta, delta, eta in zip(thetas, deltas, etas):
+        assert theta.numel() == delta.numel() == eta.numel()
+        newflatparams = theta.detach().flatten() + alpha * delta + beta * eta
+        thetahats.append(newflatparams)
+
+    return thetahats
+
+
+def evaluate(model, origin, thetahats, lossfn, testloader, device=None):
+    setparams(model, thetahats)
+    loss = test(model, lossfn, testloader, device=device)
+    setparams(model, origin)
+    return loss
+
+
+def setparams(model, thetas):
+    assert len(list(model.parameters())) == len(thetas)
+    for param, theta in zip(model.parameters(), thetas):
+        assert param.numel() == theta.numel()
+        param.data = theta.reshape(param.size())
 
 
 def main():
@@ -92,56 +115,36 @@ def main():
     model = TinyNet()
     model.load_state_dict(torch.load(f"{PATH}/{FILENAME}", map_location="cpu"))
     lossfn = nn.CrossEntropyLoss()
-    theta = paramflat(model).to(device)
-    directions = torch.randn_like(theta, device=device), torch.randn_like(
-        theta, device=device
-    )
-    delta = filternorm(directions[0], theta)
-    eta = filternorm(directions[1], theta)
+    thetas, deltas, etas = genrandvecs(model)
 
-    granulairty = 10
-    A = torch.linspace(-0.1, 0.1, granulairty, device=device)
-    B = torch.linspace(-0.1, 0.1, granulairty, device=device)
-    alpha, beta = torch.meshgrid(A, B, indexing="ij")
-    losses = torch.zeros(granulairty * granulairty)
-    newparams = (
-        theta.unsqueeze(0)
-        + alpha.reshape(-1, 1) * delta.unsqueeze(0)
-        + beta.reshape(-1, 1) * eta.unsqueeze(0)
-    )
+    resolution = 10
+    a = torch.linspace(-1, 1, resolution)
+    b = torch.linspace(-1, 1, resolution)
+    A, B = torch.meshgrid(a, b, indexing="ij")
+    Z = torch.ones((resolution, resolution))
 
     print("Landscape generating...")
     start = time.perf_counter()
-    torch.cuda.empty_cache()
-    for i in range(newparams.size(0)):
-        parameters = newparams[i]
-        model = setparams(model, parameters, clone=False)
-        loss = test(model, lossfn, testloader, device=device, verbose=False)
-        losses[i] = loss
-    # for i in range(granulairty):
-    #     for j in range(granulairty):
-    #         newparams = theta + alpha[i, j] * delta + beta[i, j] * eta
-    #         model = setparams(model, newparams, clone=True)
-    #         loss = test(model, lossfn, testloader, device=device, verbose=False)
-    #         losses[i, j] = loss
+
+    for i in range(resolution):
+        for j in range(resolution):
+            thetahats = genminimizer(thetas, deltas, etas, A[i][j], B[i][j])
+            loss = evaluate(model, thetas, thetahats, lossfn, testloader, device=device)
+            Z[i, j] = loss
+            print(f"Iteration: {i * 10 + j}, loss: {loss:.4f}")
+
     end = time.perf_counter()
     print(f"Elasped time: {(end - start):.2f} seconds")
 
-    a = alpha.cpu().numpy()
-    b = beta.cpu().numpy()
-    z = losses.cpu().numpy().reshape(granulairty, granulairty)
-
-    paramrange = (-0.2, 0.2)
-    lossrange = (0.0, 2.0)
+    a = A.numpy()
+    b = B.numpy()
+    z = Z.numpy()
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
     plt.xlabel("alpha")
     plt.ylabel("beta")
     ax.set_zlabel("loss")
-    ax.set_xlim(paramrange)
-    ax.set_ylim(paramrange)
-    ax.set_zlim(lossrange)
     ax.plot_surface(a, b, z, cmap="viridis", alpha=0.5)
     plt.show()
 
