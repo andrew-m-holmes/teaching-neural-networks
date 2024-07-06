@@ -1,77 +1,70 @@
-import os
-import numpy as np
-import matplotlib
+import torch
+import torch.nn as nn
+import torch.utils.data as data
 import matplotlib.pyplot as plt
+
+from src.utils import test
+from datasets import load_dataset
 from matplotlib.animation import FuncAnimation
-from typing import Tuple
 
-matplotlib.use("TkAgg")  # fow WSL
-
-
-def f(x: np.ndarray, a: float, b: float) -> np.ndarray:
-    return a**2 * x + b**2 * x
+from typing import List, Tuple, Optional
+from torch import Tensor
+from torch.nn.modules.loss import _Loss as Loss
+from torch.utils.data import DataLoader
 
 
-def df(x: np.ndarray, a: float, b: float, grad: float) -> Tuple[float, float]:
-    da = 2 * a * x * grad
-    db = 2 * b * x * grad
-    return da.sum(), db.sum()
+def genrandvecs(model: nn.Module) -> Tuple[List[Tensor], List[Tensor], List[Tensor]]:
+    thetas = [p.detach().clone().flatten() for p in model.parameters()]
+    deltas, etas = [], []
+
+    for theta in thetas:
+        vecx, vecy = filternorm(theta), filternorm(theta)
+        deltas.append(vecx)
+        etas.append(vecy)
+
+    assert len(thetas) == len(deltas) == len(etas)
+    return thetas, deltas, etas
 
 
-def main():
-
-    size = 100
-    features = 16
-
-    A = np.linspace(-1, 1, size)
-    B = np.linspace(-1, 1, size)
-    x = abs(np.random.randn(features))
-
-    a, b = np.meshgrid(A, B)
-    z = np.zeros((size, size))
-    for i in range(size):
-        for j in range(size):
-            loss = f(x, a[i, j], b[i, j]).mean()
-            z[i, j] = loss
-
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection="3d")
-    param_range = (-1.5, 1.5)
-    loss_range = (z.min() - 0.5, z.max() + 0.5)
-
-    plt.xlabel("a")
-    plt.ylabel("b")
-    ax.set_zlabel("loss")
-    ax.set_xlim(param_range)
-    ax.set_ylim(param_range)
-    ax.set_zlim(loss_range)
-    ax.plot_surface(a, b, z, cmap="viridis", alpha=0.5)
-    scatter = ax.scatter([], [], [], color="black", s=25, depthshade=False)
-
-    iters = 10
-    lr = 0.0075
-    a, b = -1.33, 1.25
-    grad = 1.0
-    scheduler = 1
-
-    def update(frame):
-        nonlocal a, b
-        a, b = float(a), float(b)
-        loss = f(x, a, b).mean()
-        scatter._offsets3d = ([a], [b], [loss])
-        da, db = df(x, a, b, grad)
-        a -= lr * da
-        b -= lr * db
-        if not ((frame + 1) % scheduler) or (frame + 1) == scheduler:
-            print(f"Iteration: {frame + 1}, a: {a:.3f}, b: {b:.3f}, loss: {loss:.4f}")
-        return (scatter,)
-
-    path = os.path.abspath(os.path.dirname(__file__))
-    anim = FuncAnimation(
-        fig, update, frames=iters, interval=200, blit=True, repeat=False
-    )
-    anim.save(f"{path}/../images/grad-descent-anim.gif", writer="pillow", fps=5)
+def filternorm(layerparams: Tensor) -> Tensor:
+    vec = torch.randn_like(layerparams)
+    vec *= layerparams.norm() / vec.norm()
+    return vec
 
 
-if __name__ == "__main__":
-    main()
+def genminimizer(
+    thetas: List[Tensor],
+    deltas: List[Tensor],
+    etas: List[Tensor],
+    alpha: float,
+    beta: float,
+) -> List[Tensor]:
+    thetahats = []
+
+    for theta, delta, eta in zip(thetas, deltas, etas):
+        assert theta.numel() == delta.numel() == eta.numel()
+        newflatparams = theta.detach().flatten() + alpha * delta + beta * eta
+        thetahats.append(newflatparams)
+
+    return thetahats
+
+
+def evaluate(
+    model: nn.Module,
+    origin: List[Tensor],
+    thetahats: List[Tensor],
+    lossfn: Loss,
+    testloader: DataLoader,
+    device: Optional[str] = None,
+):
+    setparams(model, thetahats)
+    loss = test(model, lossfn, testloader, device=device)
+    setparams(model, origin)
+    return loss
+
+
+def setparams(model: nn.Module, thetas: List[Tensor]) -> None:
+    assert len(list(model.parameters())) == len(thetas)
+    for param, theta in zip(model.parameters(), thetas):
+        assert param.numel() == theta.numel()
+        param.data = theta.reshape(param.size())
