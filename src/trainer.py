@@ -19,36 +19,52 @@ class Trainer:
         lossfn: nn.modules.loss._Loss,
         write: bool = True,
         filepath: Optional[str] = None,
-        filename: Optional[str] = None,
+        modelpath: Optional[str] = None,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
         self.lossfn = lossfn
         self.write = write
         self.filepath = filepath
-        self.filename = filename
+        self.modelpath = modelpath
 
     def train(
         self,
-        dataloader: data.DataLoader,
+        trainloader: data.DataLoader,
         testloader: Optional[data.DataLoader] = None,
-        accfn: Optional[Callable[..., float]] = None,
         epochs: int = 10,
         device: Optional[str] = None,
         printevery: Optional[int] = None,
     ) -> Dict[str, List[float]]:
-        verbose = printevery is not None and printevery
-        metrics = {"train loss": [], "test loss": [], "train acc": [], "testacc": []}
-        batches = len(dataloader)
+        verbose = bool(printevery is not None and printevery)
         if verbose:
             print("Training started...")
+        metrics = {
+            "train loss": [],
+            "test loss": [],
+            "train acc": [],
+            "testacc": [],
+            "trajectory": [],
+        }
+        batches = len(trainloader)
 
         for epoch in range(epochs):
             self.model.train()
             eptrloss, eptracc = 0, 0
 
-            for inputs, labels in dataloader:
-                inputs, labels = inputs.to(device), labels.to(device)
+            if self.write:
+                metrics["trajectory"].append(
+                    [
+                        p.cpu().flatten().numpy()
+                        for p in self.model.parameters()
+                        if p.requires_grad
+                    ]
+                )
+
+            for inputs, labels in trainloader:
+                inputs, labels = inputs.to(device, non_blocking=True), labels.to(
+                    device, non_blocking=True
+                )
 
                 self.optimizer.zero_grad()
                 outputs = self.model(inputs)
@@ -57,10 +73,11 @@ class Trainer:
                 self.optimizer.step()
 
                 eptrloss += loss.item()
-                eptracc += self.precision(outputs, labels, islogits=True, device=device)
+                eptracc += self.accuracy(outputs, labels, device=device)
 
             metrics["train loss"].append(eptrloss / batches)
             metrics["train acc"].append(eptracc / batches)
+
             if testloader is not None:
                 eptsloss, eptsacc = self.eval(testloader, device=device, verbose=False)
                 metrics["test loss"].append(eptsloss)
@@ -76,11 +93,7 @@ class Trainer:
             print("Training complete")
 
         if self.write:
-            if verbose:
-                print("Writing...")
-            self.save(metrics)
-            if verbose:
-                print("Metrics saved")
+            self.writetofiles(metrics, verbose=verbose)
         return metrics
 
     def eval(
@@ -92,6 +105,7 @@ class Trainer:
         if verbose:
             print("Testing started...")
         self.model.eval()
+
         with torch.no_grad():
             testloss, testacc = 0, 0
 
@@ -103,7 +117,7 @@ class Trainer:
                 outputs = self.model(inputs)
                 loss = self.lossfn(inputs, outputs)
                 testloss += loss.item()
-                acc = self.precision(outputs, labels, islogits=True, device=device)
+                acc = self.accuracy(outputs, labels, device=device)
                 testacc += acc
 
             testloss /= len(testloader)
@@ -115,11 +129,10 @@ class Trainer:
                 )
             return testloss, testacc
 
-    def precision(
+    def accuracy(
         self,
         outputs: torch.Tensor,
         labels: torch.Tensor,
-        islogits: bool = True,
         device: Optional[str] = None,
     ) -> float:
         assert outputs.size(0) == labels.size(0)
@@ -128,22 +141,33 @@ class Trainer:
             outputs, labels = outputs.to(device, non_blocking=True), labels.to(
                 device, non_blocking=True
             )
-            if islogits:
-                outputs = torch.argmax(outputs, dim=-1)
+            outputs = torch.argmax(outputs, dim=-1)
             return (outputs == labels).float().mean().item()
 
-    def save(self, metrics: Dict[str, List[float]]) -> None:
-        filepath = self.filepath if self.filepath is not None else "."
-        filename = self.filename if self.filename is not None else "trainer-metrics"
+    def writetofiles(
+        self, metrics: Dict[str, List[float]], verbose: bool = False
+    ) -> None:
+        filepath = self.filepath if self.filepath is not None else "./metrics.h5"
+        modelpath = (
+            self.modelpath
+            if self.modelpath is not None
+            else f"./{self.model.__class__.__name__.lower()}.pt"
+        )
+        if verbose:
+            print(f"Writing metrics to: {filepath}\nWriting weights to: {modelpath}")
 
         if not os.path.exists(filepath):
-            os.mkdir(filepath)
+            os.mkdir(os.path.dirname(filepath))
+        if not os.path.exists(modelpath):
+            os.mkdir(os.path.dirname(modelpath))
 
-        with h5py.File(f"{filepath}/{filename}.h5", mode="w") as file:
+        with h5py.File(f"{filepath}", mode="w") as file:
             metgroup = file.create_group("metrics")
             for key, metric in metrics.values():
                 metgroup.create_dataset(key, data=np.array(metric), dtype=np.float32)
 
-    def dstodl(self, dataset: datasets.Dataset, **dlkwargs) -> data.DataLoader:
-        dataloader = data.DataLoader(dataset, **dlkwargs)
-        return dataloader
+        statedict = self.model.cpu().state_dict()
+        torch.save(statedict, f"{modelpath}")
+
+        if verbose:
+            print("Metrics and weights written")
