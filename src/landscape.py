@@ -16,27 +16,24 @@ class Landscape:
         self,
         model: nn.Module,
         trajectory: np.ndarray,
-        method: str = "filternorm",
     ) -> None:
         self.model = model.cpu()
-        self.trajectory = [a for a in trajectory]
-        self.method = method
-        self.weights = [
-            w.flatten().numpy() for w in model.parameters() if w.requires_grad
-        ]
+        self.trajectory = trajectory
+
+    def filternorm(self) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+        vecs = ([], [])
+        with torch.no_grad():
+
+            for param in map(lambda p: p.flatten(), self.model.parameters()):
+                wnorm = param.norm()
+                vecx, vecy = torch.randn_like(param), torch.randn_like(param)
+                vecx *= wnorm / vecx.norm()
+                vecy *= wnorm / vecy.norm()
+                vecs[0].append(vecx.numpy())
+                vecs[1].append(vecy.numpy())
+            return vecs
 
     def pca(self):
-        raise NotImplementedError
-
-    def randomvecs(self):
-        dirx, diry = [], []
-        for weight in self.weights:
-            dirx.append(weight)
-
-    def custom(self):
-        raise NotImplementedError
-
-    def filternorm(self, weight: np.ndarray) -> np.ndarray:
         raise NotImplementedError
 
     @staticmethod
@@ -44,11 +41,10 @@ class Landscape:
         model: nn.Module,
         filepath: str,
         modelpath: Optional[str] = None,
-        method: str = "filter",
     ) -> "Landscape":
         if modelpath is not None:
             statedict = torch.load(modelpath, map_location="cpu")
             model.load_state_dict(statedict)
         with h5py.File(filepath, mode="r") as file:
             trajectory = file["metrics"]["trajectory"]
-            return Landscape(model, trajectory, method)
+            return Landscape(model, trajectory)
