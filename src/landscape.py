@@ -39,6 +39,7 @@ class Landscape:
         if modelpath is not None:
             statedict = torch.load(modelpath, map_location="cpu")
             model.load_state_dict(statedict)
+            
         with h5py.File(filepath, mode="r") as file:
             trajectory = file["metrics"]["trajectory"]
             return Landscape(model, trajectory)
@@ -72,8 +73,8 @@ class Landscape:
         A, B, Z = A.numpy(), B.numpy(), Z.numpy()
         with h5py.File(self.filepath, mode="w") as file:
             axesgroup = file.create_group("axes")
-            axesgroup.create_dataset("X", data=Z)
-            axesgroup.create_dataset("Y", data=Z)
+            axesgroup.create_dataset("X", data=A)
+            axesgroup.create_dataset("Y", data=B)
             axesgroup.create_dataset("Z", data=Z)
         return A, B, Z
 

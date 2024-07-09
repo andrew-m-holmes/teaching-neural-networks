@@ -43,10 +43,11 @@ class Trainer:
             "train loss": [],
             "test loss": [],
             "train acc": [],
-            "testacc": [],
+            "test acc": [],
             "trajectory": [],
         }
         batches = len(trainloader)
+        self.model.to(device)
 
         for epoch in range(epochs):
             self.model.train()
@@ -55,7 +56,7 @@ class Trainer:
             if self.write:
                 metrics["trajectory"].append(
                     [
-                        p.cpu().flatten().numpy()
+                        p.cpu().flatten().detach().numpy()
                         for p in self.model.parameters()
                         if p.requires_grad
                     ]
@@ -83,8 +84,8 @@ class Trainer:
                 metrics["test loss"].append(eptsloss)
                 metrics["test acc"].append(eptsacc)
 
-            if printevery is not None and (epoch + 1) % printevery and epoch:
-                s = f"Epoch {epoch + 1} complete, train loss: {metrics['train loss'[-1]]:.4f}, train acc: {metrics['train acc'][-1]:.2f}"
+            if printevery is not None and (epoch + 1) % printevery == 0 and epoch:
+                s = f"Epoch {epoch + 1} complete, train loss: {metrics['train loss'][-1]:.4f}, train acc: {metrics['train acc'][-1]:.2f}"
                 if testloader is not None:
                     s += f", test loss: {metrics['test loss'][-1]:.4f}, test acc: {metrics['test acc'][-1]:.2f}"
                 print(s)
@@ -115,7 +116,7 @@ class Trainer:
                 )
 
                 outputs = self.model(inputs)
-                loss = self.lossfn(inputs, outputs)
+                loss = self.lossfn(outputs, labels)
                 testloss += loss.item()
                 acc = self.accuracy(outputs, labels, device=device)
                 testacc += acc
@@ -156,14 +157,15 @@ class Trainer:
         if verbose:
             print(f"Writing metrics to: {filepath}\nWriting weights to: {modelpath}")
 
-        if not os.path.exists(filepath):
+        if not os.path.exists(os.path.dirname(filepath)):
             os.mkdir(os.path.dirname(filepath))
-        if not os.path.exists(modelpath):
+        if not os.path.exists(os.path.dirname(modelpath)):
             os.mkdir(os.path.dirname(modelpath))
 
         with h5py.File(f"{filepath}", mode="w") as file:
             metgroup = file.create_group("metrics")
-            for key, metric in metrics.values():
+            for key, metric in metrics.items():
+                # TODO Fix
                 metgroup.create_dataset(key, data=np.array(metric), dtype=np.float32)
 
         statedict = self.model.cpu().state_dict()
