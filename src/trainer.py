@@ -55,11 +55,14 @@ class Trainer:
 
             if self.write:
                 metrics["trajectory"].append(
-                    [
-                        p.cpu().flatten().detach().numpy()
-                        for p in self.model.parameters()
-                        if p.requires_grad
-                    ]
+                    np.concatenate(
+                        [
+                            p.cpu().flatten().detach().numpy()
+                            for p in self.model.parameters()
+                            if p.requires_grad
+                        ],
+                        axis=0,
+                    )
                 )
 
             for inputs, labels in trainloader:
@@ -84,7 +87,9 @@ class Trainer:
                 metrics["test loss"].append(eptsloss)
                 metrics["test acc"].append(eptsacc)
 
-            if printevery is not None and (epoch + 1) % printevery == 0 and epoch:
+            if (printevery and (epoch + 1) % printevery == 0 and epoch) or (
+                epoch + 1
+            ) == printevery:
                 s = f"Epoch {epoch + 1} complete, train loss: {metrics['train loss'][-1]:.4f}, train acc: {metrics['train acc'][-1]:.2f}"
                 if testloader is not None:
                     s += f", test loss: {metrics['test loss'][-1]:.4f}, test acc: {metrics['test acc'][-1]:.2f}"
@@ -165,7 +170,6 @@ class Trainer:
         with h5py.File(f"{filepath}", mode="w") as file:
             metgroup = file.create_group("metrics")
             for key, metric in metrics.items():
-                # TODO Fix
                 metgroup.create_dataset(key, data=np.array(metric), dtype=np.float32)
 
         statedict = self.model.cpu().state_dict()

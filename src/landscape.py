@@ -14,16 +14,10 @@ class Landscape:
     def __init__(
         self,
         model: nn.Module,
-        lossfn: Callable[..., torch.Tensor],
-        dataloader: data.DataLoader,
         trajectory: np.ndarray,
-        filepath: Optional[str] = None,
     ) -> None:
         self.model = model.cpu()
-        self.lossfn = lossfn
-        self.dataloader = dataloader
         self.trajectory = trajectory
-        self.filepath = filepath if filepath is not None else "./landscape.h5"
         self.parameters = [
             p.cpu().flatten().clone().detach()
             for p in model.parameters()
@@ -39,18 +33,22 @@ class Landscape:
         if modelpath is not None:
             statedict = torch.load(modelpath, map_location="cpu")
             model.load_state_dict(statedict)
-            
+
         with h5py.File(filepath, mode="r") as file:
-            trajectory = file["metrics"]["trajectory"]
+            trajectory = file["metrics"]["trajectory"][:]
             return Landscape(model, trajectory)
 
     def create(
         self,
+        lossfn: Callable[..., torch.Tensor],
+        dataloader: data.DataLoader,
         resolution: int = 10,
         bounds: Tuple[float, float] = (-10.0, 10.0),
         device: Optional[str] = None,
-        verbose: bool = True,
+        printevery: Optional[int] = None,
+        filepath: Optional[str] = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        verbose = bool(printevery is not None and printevery)
         vecx, vecy = self.filternorm()
         linspacex, linspacey = torch.linspace(
             *bounds, steps=resolution
@@ -65,22 +63,26 @@ class Landscape:
                 for p, x, y in zip(self.parameters, vecx, vecy):
                     parameters.append(p + A[i][j] * x + B[i][j] * y)
 
-                loss = self.computeloss(parameters, device=device)
+                loss = self.computeloss(parameters, lossfn, dataloader, device=device)
                 Z[i, j] = loss
-                if verbose:
-                    print(f"Iteration: {i * 10 + j + 1}Loss: {loss:.4f}")
+
+                iter = i * resolution + j + 1
+                if (
+                    printevery and iter % printevery == 0 and iter != 1
+                ) or iter == printevery:
+                    print(f"Iteration: {i * resolution + j + 1}, loss: {loss:.4f}")
 
         A, B, Z = A.numpy(), B.numpy(), Z.numpy()
-        with h5py.File(self.filepath, mode="w") as file:
-            axesgroup = file.create_group("axes")
-            axesgroup.create_dataset("X", data=A)
-            axesgroup.create_dataset("Y", data=B)
-            axesgroup.create_dataset("Z", data=Z)
+        if filepath is None:
+            filepath = "./landscape.h5"
+        self.writetofiles(A, B, Z, filepath=filepath, verbose=verbose)
         return A, B, Z
 
     def computeloss(
         self,
         parameters: List[torch.Tensor],
+        lossfn: Callable[..., torch.Tensor],
+        dataloader: data.DataLoader,
         device: Optional[str] = None,
     ) -> float:
         self.model.eval()
@@ -89,17 +91,17 @@ class Landscape:
 
         with torch.no_grad():
             testloss = 0
-            for inputs, labels in self.dataloader:
+            for inputs, labels in dataloader:
                 inputs, labels = inputs.to(device, non_blocking=True), labels.to(
                     device, non_blocking=True
                 )
                 outputs = self.model(inputs)
-                loss = self.lossfn(outputs, labels)
+                loss = lossfn(outputs, labels)
                 testloss += loss.item()
 
         self.model.cpu()
         self.setparameters(self.parameters)
-        testloss /= len(self.dataloader)
+        testloss /= len(dataloader)
         return testloss
 
     def setparameters(self, parameters: List[torch.Tensor]) -> None:
@@ -123,3 +125,23 @@ class Landscape:
 
     def pca(self):
         raise NotImplementedError
+
+    def writetofiles(
+        self,
+        A: np.ndarray,
+        B: np.ndarray,
+        Z: np.ndarray,
+        filepath: str,
+        verbose: bool = True,
+    ) -> None:
+        if verbose:
+            print(f"Writing landscape to: {filepath}")
+
+        with h5py.File(filepath, mode="w") as file:
+            axesgroup = file.create_group("axes")
+            axesgroup.create_dataset("A", data=A)
+            axesgroup.create_dataset("B", data=B)
+            axesgroup.create_dataset("Z", data=Z)
+
+        if verbose:
+            print("Landscape written")
