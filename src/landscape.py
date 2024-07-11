@@ -1,12 +1,13 @@
 import h5py
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.data as data
-import numpy as np
-import matplotlib.pyplot as plt
 
 from sklearn.decomposition import PCA
 from typing import Callable, List, Tuple, Optional
+
+Trajectory = List[torch.Tensor]
 
 
 class Landscape:
@@ -14,8 +15,9 @@ class Landscape:
     def __init__(
         self,
         model: nn.Module,
-        trajectory: np.ndarray,
+        trajectory: Optional[Trajectory],
     ) -> None:
+
         self.model = model.cpu()
         self.trajectory = trajectory
         self.parameters = [
@@ -27,16 +29,16 @@ class Landscape:
     @staticmethod
     def fromfiles(
         model: nn.Module,
-        filepath: str,
         modelpath: Optional[str] = None,
+        trajpath: Optional[str] = None,
     ) -> "Landscape":
+
         if modelpath is not None:
             statedict = torch.load(modelpath, map_location="cpu")
             model.load_state_dict(statedict)
 
-        with h5py.File(filepath, mode="r") as file:
-            trajectory = file["metrics"]["trajectory"][:]
-            return Landscape(model, trajectory)
+        trajectory = torch.load(trajpath) if trajpath is not None else None
+        return Landscape(model, trajectory)
 
     def create(
         self,
@@ -48,6 +50,7 @@ class Landscape:
         printevery: Optional[int] = None,
         filepath: Optional[str] = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+
         verbose = bool(printevery is not None and printevery)
         vecx, vecy = self.filternorm()
         linspacex, linspacey = torch.linspace(
@@ -85,6 +88,7 @@ class Landscape:
         dataloader: data.DataLoader,
         device: Optional[str] = None,
     ) -> float:
+
         self.model.eval()
         self.setparameters(parameters)
         self.model.to(device)
@@ -105,6 +109,7 @@ class Landscape:
         return testloss
 
     def setparameters(self, parameters: List[torch.Tensor]) -> None:
+
         modelparams = [p for p in self.model.parameters() if p.requires_grad]
         assert len(parameters) == len(modelparams)
 
@@ -112,8 +117,8 @@ class Landscape:
             currparam.data = newparam.reshape(currparam.size())
 
     def filternorm(self) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
-        vecx, vecy = [], []
 
+        vecx, vecy = [], []
         for parameter in self.parameters:
             pnorm = parameter.norm()
             x = torch.randn_like(parameter)
@@ -124,7 +129,11 @@ class Landscape:
         return vecx, vecy
 
     def pca(self):
-        raise NotImplementedError
+        assert self.trajectory is not None
+        diffmats = []
+        for param, updatemat in zip(self.parameters, self.trajectory):
+            diffmats.append(updatemat - param)
+        print(diffmats[0])
 
     def writetofiles(
         self,
@@ -134,6 +143,7 @@ class Landscape:
         filepath: str,
         verbose: bool = True,
     ) -> None:
+
         if verbose:
             print(f"Writing landscape to: {filepath}")
 

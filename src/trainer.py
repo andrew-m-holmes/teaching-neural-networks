@@ -1,13 +1,12 @@
 import os
 import h5py
-import datasets
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.utils.data as data
 import torch.optim as optim
 
-from typing import Tuple, List, Optional, Callable, Dict, Any
+from typing import Tuple, List, Optional, Callable, Dict
 
 
 class Trainer:
@@ -16,10 +15,11 @@ class Trainer:
         self,
         model: nn.Module,
         optimizer: optim.Optimizer,
-        lossfn: nn.modules.loss._Loss,
+        lossfn: Callable[..., torch.Tensor],
         write: bool = True,
         filepath: Optional[str] = None,
         modelpath: Optional[str] = None,
+        trajpath: Optional[str] = None,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -27,6 +27,7 @@ class Trainer:
         self.write = write
         self.filepath = filepath
         self.modelpath = modelpath
+        self.trajpath = trajpath
 
     def train(
         self,
@@ -44,8 +45,9 @@ class Trainer:
             "test loss": [],
             "train acc": [],
             "test acc": [],
-            "trajectory": [],
         }
+        nparams = len(self.currentparams())
+        trajectory = [[] for _ in range(nparams)]
         batches = len(trainloader)
         self.model.to(device)
 
@@ -54,16 +56,8 @@ class Trainer:
             eptrloss, eptracc = 0, 0
 
             if self.write:
-                metrics["trajectory"].append(
-                    np.concatenate(
-                        [
-                            p.cpu().flatten().detach().numpy()
-                            for p in self.model.parameters()
-                            if p.requires_grad
-                        ],
-                        axis=0,
-                    )
-                )
+                for i, param in enumerate(self.currentparams()):
+                    trajectory[i].append(param.cpu().flatten())
 
             for inputs, labels in trainloader:
                 inputs, labels = inputs.to(device, non_blocking=True), labels.to(
@@ -99,7 +93,8 @@ class Trainer:
             print("Training complete")
 
         if self.write:
-            self.writetofiles(metrics, verbose=verbose)
+            trajectory = [torch.stack(u) for u in trajectory]
+            self.writetofiles(metrics, trajectory, verbose=verbose)
         return metrics
 
     def eval(
@@ -150,8 +145,15 @@ class Trainer:
             outputs = torch.argmax(outputs, dim=-1)
             return (outputs == labels).float().mean().item()
 
+    def currentparams(self) -> List[torch.Tensor]:
+        params = [p.cpu().detach() for p in self.model.parameters() if p.requires_grad]
+        return params
+
     def writetofiles(
-        self, metrics: Dict[str, List[float]], verbose: bool = False
+        self,
+        metrics: Dict[str, List[float]],
+        trajectory: List[torch.Tensor],
+        verbose: bool = False,
     ) -> None:
         filepath = self.filepath if self.filepath is not None else "./metrics.h5"
         modelpath = (
@@ -159,21 +161,30 @@ class Trainer:
             if self.modelpath is not None
             else f"./{self.model.__class__.__name__.lower()}.pt"
         )
+        trajpath = (
+            self.trajpath
+            if self.trajpath is not None
+            else f"./{self.model.__class__.__name__}_traj.pt"
+        )
+
         if verbose:
-            print(f"Writing metrics to: {filepath}\nWriting weights to: {modelpath}")
+            print(
+                f"Writing metrics to: {filepath}\nWriting parameters to: {modelpath}\nWriting trajectory to: {trajpath}"
+            )
 
         if not os.path.exists(os.path.dirname(filepath)):
             os.mkdir(os.path.dirname(filepath))
         if not os.path.exists(os.path.dirname(modelpath)):
             os.mkdir(os.path.dirname(modelpath))
 
-        with h5py.File(f"{filepath}", mode="w") as file:
+        with h5py.File(filepath, mode="w") as file:
             metgroup = file.create_group("metrics")
             for key, metric in metrics.items():
                 metgroup.create_dataset(key, data=np.array(metric), dtype=np.float32)
 
         statedict = self.model.cpu().state_dict()
-        torch.save(statedict, f"{modelpath}")
+        torch.save(statedict, modelpath)
+        torch.save(trajectory, trajpath)
 
         if verbose:
             print("Metrics and weights written")
