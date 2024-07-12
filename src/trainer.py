@@ -46,8 +46,7 @@ class Trainer:
             "train acc": [],
             "test acc": [],
         }
-        nparams = len(self.currentparams())
-        trajectory = [[] for _ in range(nparams)]
+        trajectory = []
         batches = len(trainloader)
         self.model.to(device)
 
@@ -56,8 +55,15 @@ class Trainer:
             eptrloss, eptracc = 0, 0
 
             if self.write:
-                for i, param in enumerate(self.currentparams()):
-                    trajectory[i].append(param.cpu().flatten())
+                trajectory.append(
+                    torch.cat(
+                        [
+                            p.cpu().flatten().detach()
+                            for p in self.model.parameters()
+                            if p.requires_grad
+                        ]
+                    )
+                )
 
             for inputs, labels in trainloader:
                 inputs, labels = inputs.to(device, non_blocking=True), labels.to(
@@ -93,7 +99,7 @@ class Trainer:
             print("Training complete")
 
         if self.write:
-            trajectory = [torch.stack(u) for u in trajectory]
+            trajectory = torch.stack(trajectory)
             self.writetofiles(metrics, trajectory, verbose=verbose)
         return metrics
 
@@ -152,7 +158,7 @@ class Trainer:
     def writetofiles(
         self,
         metrics: Dict[str, List[float]],
-        trajectory: List[torch.Tensor],
+        trajectory: torch.Tensor,
         verbose: bool = False,
     ) -> None:
         filepath = self.filepath if self.filepath is not None else "./metrics.h5"

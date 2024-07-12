@@ -7,7 +7,7 @@ import torch.utils.data as data
 from sklearn.decomposition import PCA
 from typing import Callable, List, Tuple, Optional
 
-Trajectory = List[torch.Tensor]
+Trajectory = torch.Tensor
 
 
 class Landscape:
@@ -49,6 +49,7 @@ class Landscape:
         device: Optional[str] = None,
         printevery: Optional[int] = None,
         filepath: Optional[str] = None,
+        mode="filter",
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
         verbose = bool(printevery is not None and printevery)
@@ -119,6 +120,7 @@ class Landscape:
     def filternorm(self) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
 
         vecx, vecy = [], []
+
         for parameter in self.parameters:
             pnorm = parameter.norm()
             x = torch.randn_like(parameter)
@@ -128,12 +130,17 @@ class Landscape:
 
         return vecx, vecy
 
-    def pca(self):
+    def pca(self) -> Tuple[torch.Tensor, torch.Tensor]:
+
         assert self.trajectory is not None
-        diffmats = []
-        for param, updatemat in zip(self.parameters, self.trajectory):
-            diffmats.append(updatemat - param)
-        print(diffmats[0])
+        flatparams = torch.cat(self.parameters)
+        diffmat = (self.trajectory - flatparams).numpy()
+
+        pca = PCA(n_components=2)
+        pca.fit(diffmat)
+        pc1 = torch.from_numpy(pca.components_[0])
+        pc2 = torch.from_numpy(pca.components_[1])
+        return pc1, pc2
 
     def writetofiles(
         self,
