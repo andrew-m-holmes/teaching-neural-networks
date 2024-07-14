@@ -12,18 +12,23 @@ Mesh = Tuple[np.ndarray, np.ndarray, np.ndarray]
 
 class Plot:
 
-    def __init__(self, mesh: Mesh) -> None:
+    def __init__(self, mesh: Mesh, trajectory: Optional[np.ndarray] = None) -> None:
         self.mesh = mesh
+        self.trajectory = trajectory
 
     @staticmethod
     def from_files(mesh_path: str) -> "Plot":
+
+        trajectory = None
         with h5py.File(mesh_path, mode="r") as file:
             A = file["mesh"]["X"][:]
             B = file["mesh"]["Y"][:]
             Z = file["mesh"]["Z"][:]
+            if "trajectory" in file["mesh"]:
+                trajectory = file["mesh"]["trajectory"][:]
             assert A.shape == B.shape == Z.shape
 
-        return Plot((A, B, Z))
+        return Plot((A, B, Z), trajectory)
 
     def plot_surface_3D(
         self, show: bool = True, file_path: Optional[str] = None
@@ -44,14 +49,24 @@ class Plot:
             plt.close()
 
     def plot_contour(
-        self, levels: int = 20, show: bool = True, file_path: Optional[str] = None
+        self,
+        levels: int = 10,
+        plot_trajectory: bool = False,
+        show: bool = True,
+        file_path: Optional[str] = None,
     ) -> None:
 
         fig, ax = plt.subplots(figsize=(10, 8))
+        contour = ax.contourf(*self.mesh, cmap="viridis", levels=levels)
+        ax.clabel(contour, inline=1, fontsize=8)
+
+        if plot_trajectory:
+            assert self.trajectory is not None
+            x, y = self.trajectory
+            ax.plot(x, y, marker=".")
+
         plt.xlabel("alpha")
         plt.ylabel("beta")
-        contour = ax.contourf(*self.mesh, cmap="viridis", levels=levels)
-
         plt.colorbar(contour, ax=ax, label="loss")
 
         if file_path is not None:

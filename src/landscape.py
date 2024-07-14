@@ -50,18 +50,26 @@ class Landscape:
         self,
         dataloder: data.DataLoader,
         mode: str = "filter",
+        custom_dirs: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         resolution: int = 10,
         bounds: Tuple[float, float] = (-1.0, 1.0),
         device: Optional[str] = None,
         print_every: Optional[int] = None,
-    ) -> Mesh:
+    ) -> Tuple[Mesh, Optional[np.ndarray]]:
+
+        mode = mode.lower().strip()
+        dir1, dir2 = torch.empty(0), torch.empty(0)
+        trajectory = None
 
         if mode == "filter":
             dir1, dir2 = self.filter_norm()
         elif mode == "pca":
-            dir1, dir2 = self.pca()
+            dir1, dir2, trajectory = self.pca()
+        elif mode == "custom":
+            assert custom_dirs is not None
+            dir1, dir2 = custom_dirs
         else:
-            raise RuntimeError()
+            raise ValueError(f"Invalid mode: {mode}")
 
         x_coord = torch.linspace(*bounds, steps=resolution)
         y_coord = torch.linspace(*bounds, steps=resolution)
@@ -86,8 +94,13 @@ class Landscape:
 
         X, Y, Z = X.numpy(), Y.numpy(), Z.numpy()
         if self.write:
-            self.write_file((X, Y, Z), self.file_path, verbose=bool(print_every))
-        return X, Y, Z
+            self.write_file(
+                (X, Y, Z),
+                trajectory=trajectory,
+                file_path=self.file_path,
+                verbose=bool(print_every),
+            )
+        return (X, Y, Z), trajectory
 
     def compute_loss(
         self,
@@ -149,18 +162,24 @@ class Landscape:
 
             return torch.cat(dir1), torch.cat(dir2)
 
-    def pca(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def pca(self) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray]:
         assert self.trajectory is not None
         diff_matrix = self.trajectory - self.flat_parameters()
         pca = PCA(n_components=2)
-        pca.fit(diff_matrix.numpy())
+        trajectory = pca.fit_transform(diff_matrix.numpy())
 
-        return torch.from_numpy(pca.components_[0]), torch.from_numpy(
-            pca.components_[1]
+        return (
+            torch.from_numpy(pca.components_[0]),
+            torch.from_numpy(pca.components_[1]),
+            trajectory.T,
         )
 
     def write_file(
-        self, mesh: Mesh, file_path: Optional[str] = None, verbose: bool = True
+        self,
+        mesh: Mesh,
+        trajectory: Optional[np.ndarray] = None,
+        file_path: Optional[str] = None,
+        verbose: bool = True,
     ) -> None:
         if file_path is None:
             file_path = "./landscape.h5"
@@ -174,6 +193,9 @@ class Landscape:
             mesh_group.create_dataset("X", data=X)
             mesh_group.create_dataset("Y", data=Y)
             mesh_group.create_dataset("Z", data=Z)
+
+            if trajectory is not None:
+                mesh_group.create_dataset("trajectory", data=trajectory)
 
         if verbose:
             print(f"{file_path} written")
