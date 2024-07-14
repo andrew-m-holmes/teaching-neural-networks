@@ -5,9 +5,10 @@ import torch.nn as nn
 import torch.utils.data as data
 
 from sklearn.decomposition import PCA
-from typing import Callable, List, Tuple, Optional
+from typing import Callable, Tuple, Optional
 
-Trajectory = torch.Tensor
+
+Mesh = Tuple[np.ndarray, np.ndarray, np.ndarray]
 
 
 class Landscape:
@@ -15,150 +16,171 @@ class Landscape:
     def __init__(
         self,
         model: nn.Module,
-        trajectory: Optional[Trajectory],
+        loss_fn: Callable[..., torch.Tensor],
+        trajectory: Optional[torch.Tensor] = None,
+        write: bool = True,
+        file_path: Optional[str] = None,
     ) -> None:
 
         self.model = model.cpu()
+        self.loss_fn = loss_fn
         self.trajectory = trajectory
-        self.parameters = [
-            p.cpu().flatten().clone().detach()
-            for p in model.parameters()
-            if p.requires_grad
-        ]
+        self.write = write
+        self.file_path = file_path
 
     @staticmethod
-    def fromfiles(
-        model: nn.Module,
-        modelpath: Optional[str] = None,
-        trajpath: Optional[str] = None,
+    def from_files(
+        model,
+        loss_fn: Callable[..., torch.Tensor],
+        param_path: str,
+        traj_path: Optional[str] = None,
+        write: bool = True,
+        file_path: Optional[str] = None,
     ) -> "Landscape":
 
-        if modelpath is not None:
-            statedict = torch.load(modelpath, map_location="cpu")
-            model.load_state_dict(statedict)
+        state_dict = torch.load(param_path, map_location="cpu")
+        model.load_state_dict(state_dict)
+        trajectory = (
+            torch.load(traj_path, map_location="cpu") if traj_path is not None else None
+        )
 
-        trajectory = torch.load(trajpath) if trajpath is not None else None
-        return Landscape(model, trajectory)
+        return Landscape(model, loss_fn, trajectory, write, file_path)
 
-    def create(
+    def create_landscape(
         self,
-        lossfn: Callable[..., torch.Tensor],
-        dataloader: data.DataLoader,
+        dataloder: data.DataLoader,
+        mode: str = "filter",
         resolution: int = 10,
-        bounds: Tuple[float, float] = (-10.0, 10.0),
+        bounds: Tuple[float, float] = (-1.0, 1.0),
         device: Optional[str] = None,
-        printevery: Optional[int] = None,
-        filepath: Optional[str] = None,
-        mode="filter",
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        print_every: Optional[int] = None,
+    ) -> Mesh:
 
-        verbose = bool(printevery is not None and printevery)
-        vecx, vecy = self.filternorm()
-        linspacex, linspacey = torch.linspace(
-            *bounds, steps=resolution
-        ), torch.linspace(*bounds, steps=resolution)
-        A, B = torch.meshgrid(linspacex, linspacey, indexing="ij")
+        if mode == "filter":
+            dir1, dir2 = self.filter_norm()
+        elif mode == "pca":
+            dir1, dir2 = self.pca()
+        else:
+            raise RuntimeError()
 
-        Z = torch.zeros(resolution, resolution)
+        x_coord = torch.linspace(*bounds, steps=resolution)
+        y_coord = torch.linspace(*bounds, steps=resolution)
+        X, Y = torch.meshgrid(x_coord, y_coord, indexing="ij")
+        Z = torch.zeros((resolution, resolution))
+
+        trained_parameters = self.flat_parameters()
         for i in range(resolution):
             for j in range(resolution):
-                parameters = []
 
-                for p, x, y in zip(self.parameters, vecx, vecy):
-                    parameters.append(p + A[i][j] * x + B[i][j] * y)
+                new_parameters = trained_parameters + X[i][j] * dir1 + Y[i][j] * dir2
+                self.assign_parameters(new_parameters)
+                loss = self.compute_loss(dataloder, device)
+                Z[i][j] = loss
+                self.assign_parameters(trained_parameters)
 
-                loss = self.computeloss(parameters, lossfn, dataloader, device=device)
-                Z[i, j] = loss
+                iters = i * resolution + j + 1
+                if print_every and (
+                    (iters % print_every == 0 and iters != 1) or iters == print_every
+                ):
+                    print(f"Iteration: {iters}, loss: {loss:.4f}")
 
-                iter = i * resolution + j + 1
-                if (
-                    printevery and iter % printevery == 0 and iter != 1
-                ) or iter == printevery:
-                    print(f"Iteration: {i * resolution + j + 1}, loss: {loss:.4f}")
+        X, Y, Z = X.numpy(), Y.numpy(), Z.numpy()
+        if self.write:
+            self.write_file((X, Y, Z), self.file_path, verbose=bool(print_every))
+        return X, Y, Z
 
-        A, B, Z = A.numpy(), B.numpy(), Z.numpy()
-        if filepath is None:
-            filepath = "./landscape.h5"
-        self.writetofiles(A, B, Z, filepath=filepath, verbose=verbose)
-        return A, B, Z
-
-    def computeloss(
+    def compute_loss(
         self,
-        parameters: List[torch.Tensor],
-        lossfn: Callable[..., torch.Tensor],
         dataloader: data.DataLoader,
         device: Optional[str] = None,
     ) -> float:
-
         self.model.eval()
-        self.setparameters(parameters)
-        self.model.to(device)
 
         with torch.no_grad():
-            testloss = 0
+
+            total_loss = 0
+
             for inputs, labels in dataloader:
-                inputs, labels = inputs.to(device, non_blocking=True), labels.to(
-                    device, non_blocking=True
-                )
+                inputs = inputs.to(device, non_blocking=True)
+                labels = labels.to(device, non_blocking=True)
                 outputs = self.model(inputs)
-                loss = lossfn(outputs, labels)
-                testloss += loss.item()
+                loss = self.loss_fn(outputs, labels)
+                total_loss += loss.item()
 
-        self.model.cpu()
-        self.setparameters(self.parameters)
-        testloss /= len(dataloader)
-        return testloss
+            return total_loss / len(dataloader)
 
-    def setparameters(self, parameters: List[torch.Tensor]) -> None:
+    def assign_parameters(self, new_parameters: torch.Tensor) -> None:
 
-        modelparams = [p for p in self.model.parameters() if p.requires_grad]
-        assert len(parameters) == len(modelparams)
+        start = 0
+        for param in self.model.parameters():
+            if not param.requires_grad:
+                continue
 
-        for currparam, newparam in zip(modelparams, parameters):
-            currparam.data = newparam.reshape(currparam.size())
+            end = start + param.numel()
+            param_slice = new_parameters[start:end].reshape(param.size())
+            param.data = param_slice
+            start = end
 
-    def filternorm(self) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
+    def flat_parameters(self) -> torch.Tensor:
+        return torch.cat(
+            [
+                p.flatten().detach().clone()
+                for p in self.model.parameters()
+                if p.requires_grad
+            ]
+        )
 
-        vecx, vecy = [], []
+    def filter_norm(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        dir1, dir2 = [], []
 
-        for parameter in self.parameters:
-            pnorm = parameter.norm()
-            x = torch.randn_like(parameter)
-            vecx.append(x * pnorm / x.norm())
-            y = torch.randn_like(parameter)
-            vecy.append(y * pnorm / y.norm())
+        with torch.no_grad():
 
-        return vecx, vecy
+            for param in self.model.parameters():
+                if not param.requires_grad:
+                    continue
+
+                vec1 = torch.randn_like(param).flatten()
+                vec1 = vec1 * param.norm() / vec1.norm()
+                vec2 = torch.randn_like(param).flatten()
+                vec2 = vec2 * param.norm() / vec2.norm()
+
+                dir1.append(vec1)
+                dir2.append(vec2)
+
+            return torch.cat(dir1), torch.cat(dir2)
 
     def pca(self) -> Tuple[torch.Tensor, torch.Tensor]:
-
         assert self.trajectory is not None
-        flatparams = torch.cat(self.parameters)
-        diffmat = (self.trajectory - flatparams).numpy()
-
+        diff_matrix = self.trajectory - self.flat_parameters()
         pca = PCA(n_components=2)
-        pca.fit(diffmat)
-        pc1 = torch.from_numpy(pca.components_[0])
-        pc2 = torch.from_numpy(pca.components_[1])
-        return pc1, pc2
+        pca.fit(diff_matrix.numpy())
 
-    def writetofiles(
-        self,
-        A: np.ndarray,
-        B: np.ndarray,
-        Z: np.ndarray,
-        filepath: str,
-        verbose: bool = True,
+        return torch.from_numpy(pca.components_[0]), torch.from_numpy(
+            pca.components_[1]
+        )
+
+    def write_file(
+        self, mesh: Mesh, file_path: Optional[str] = None, verbose: bool = True
     ) -> None:
+        if file_path is None:
+            file_path = "./landscape.h5"
 
         if verbose:
-            print(f"Writing landscape to: {filepath}")
+            print(f"Writing to f{file_path}")
 
-        with h5py.File(filepath, mode="w") as file:
-            axesgroup = file.create_group("axes")
-            axesgroup.create_dataset("A", data=A)
-            axesgroup.create_dataset("B", data=B)
-            axesgroup.create_dataset("Z", data=Z)
+        X, Y, Z = mesh
+        with h5py.File(file_path, mode="w") as file:
+            mesh_group = file.create_group("mesh")
+            mesh_group.create_dataset("X", data=X)
+            mesh_group.create_dataset("Y", data=Y)
+            mesh_group.create_dataset("Z", data=Z)
 
         if verbose:
-            print("Landscape written")
+            print(f"{file_path} written")
+
+
+if __name__ == "__main__":
+
+    x = torch.randn(9)
+    y = x.reshape(3, 3)
+    assert x.norm() == y.norm()
