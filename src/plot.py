@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from typing import Tuple, Optional
 
-matplotlib.use("TkAgg")  # fow WSL
+# matplotlib.use("TkAgg")  # fow WSL
 
 Mesh = Tuple[np.ndarray, np.ndarray, np.ndarray]
 
@@ -50,7 +50,7 @@ class Plot:
 
     def plot_contour(
         self,
-        levels: int = 10,
+        levels: int = 35,
         plot_trajectory: bool = False,
         show: bool = True,
         file_path: Optional[str] = None,
