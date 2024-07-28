@@ -31,7 +31,7 @@ class Plot:
         return Plot((A, B, Z), trajectory)
 
     def plot_surface_3D(
-        self, show: bool = True, file_path: Optional[str] = None
+        self, cmap: str = "viridis", show: bool = True, file_path: Optional[str] = None
     ) -> None:
 
         fig = plt.figure(figsize=(10, 8))
@@ -39,7 +39,7 @@ class Plot:
         plt.xlabel("alpha")
         plt.ylabel("beta")
         ax.set_zlabel("loss")
-        ax.plot_surface(*self.mesh, cmap="viridis", alpha=0.5)
+        ax.plot_surface(*self.mesh, cmap=cmap, alpha=0.5)
 
         if file_path is not None:
             plt.savefig(file_path)
@@ -47,6 +47,56 @@ class Plot:
             plt.show()
         else:
             plt.close()
+
+    def animate_surface_3D(
+        self,
+        cmap: str = "viridis",
+        fps: int = 5,
+        show: bool = True,
+        file_path: Optional[str] = None,
+    ) -> None:
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection="3d")
+        plt.xlabel("alpha")
+        plt.ylabel("beta")
+        ax.set_zlabel("loss")
+        ax.plot_surface(*self.mesh, cmap=cmap, alpha=0.5)
+
+        assert self.trajectory is not None
+        trajectory = self.trajectory.T
+
+        surface = np.array([*self.mesh])
+        pc_0 = trajectory[0]
+        pcx, pcy, pcz = [pc_0[0]], [pc_0[1]], [surface[pc_0[0], [c]]]
+        point = ax.scatter(pcx, pcy, pcz, color="black", s=25, depthshade=False)
+        text = ax.text2D(0.02, 0.95, "", transform=ax.transAxes)
+
+        def update(frame):
+            pc = trajectory[frame]
+            point._offsets3d = ([pc[0]], [pc[1]], [pc[2]])
+            text.set_text(f"Iteration: {frame + 1}")
+            return point, text
+
+        global anim
+        anim = FuncAnimation(
+            fig,
+            update,
+            frames=len(trajectory),
+            blit=True,
+            interval=200,
+            repeat=False,
+        )
+
+        if show:
+            plt.show()
+        if file_path is not None:
+            anim.save(file_path, writer="pillow", fps=fps)
+        plt.close()
+
+    def _get_loss_coord(self, mesh: Mesh, indices: Tuple[int, int]) -> float:
+        X, Y, Z = mesh
+        raise NotImplementedError
 
     def plot_contour(
         self,
@@ -66,8 +116,8 @@ class Plot:
             x, y = self.trajectory
             ax.plot(x, y, marker=".")
 
-        plt.xlabel("alpha")
-        plt.ylabel("beta")
+        plt.xlabel("principle component 1")
+        plt.ylabel("principle component 2")
         plt.colorbar(contour, ax=ax, label="loss")
 
         if file_path is not None:
@@ -82,6 +132,7 @@ class Plot:
         levels: int = 35,
         fps: int = 5,
         cmap: str = "viridis",
+        show: bool = True,
         file_path: Optional[str] = None,
     ) -> None:
         fig, ax = plt.subplots(figsize=(10, 8))
@@ -121,6 +172,8 @@ class Plot:
             repeat=False,
         )
 
+        if show:
+            plt.show()
         if file_path is not None:
             anim.save(file_path, writer="pillow", fps=fps)
         plt.close()
