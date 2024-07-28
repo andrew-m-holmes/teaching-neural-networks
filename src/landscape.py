@@ -51,8 +51,8 @@ class Landscape:
         dataloder: data.DataLoader,
         mode: str = "filter",
         custom_dirs: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        resolution: int = 10,
-        bounds: Tuple[float, float] = (-1.0, 1.0),
+        resolution: int = 25,
+        bounds: Tuple[float, float] = (-10.0, 10.0),
         device: Optional[str] = None,
         print_every: Optional[int] = None,
     ) -> Tuple[Mesh, Optional[np.ndarray]]:

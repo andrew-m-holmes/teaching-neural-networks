@@ -48,8 +48,8 @@ def main():
     ax.plot_surface(a, b, z, cmap="viridis", alpha=0.5)
     scatter = ax.scatter([], [], [], color="black", s=25, depthshade=False)
 
-    iters = 10
-    lr = 0.0075
+    iters = 25
+    lr = 0.0025
     a, b = -1.33, 1.25
     grad = 1.0
     scheduler = 1
@@ -67,10 +67,8 @@ def main():
         return (scatter,)
 
     path = os.path.abspath(os.path.dirname(__file__))
-    anim = FuncAnimation(
-        fig, update, frames=iters, interval=200, blit=True, repeat=False
-    )
-    anim.save(f"{path}/../images/grad-descent-anim.gif", writer="pillow", fps=5)
+    anim = FuncAnimation(fig, update, frames=iters, interval=200, blit=True)
+    anim.save(f"{path}/../images/grad-descent-anim.gif", writer="pillow", fps=10)
 
 
 if __name__ == "__main__":
