@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from typing import Tuple, Optional
 
-# matplotlib.use("TkAgg")  # fow WSL
+matplotlib.use("TkAgg")  # fow WSL
 
 Mesh = Tuple[np.ndarray, np.ndarray, np.ndarray]
 
@@ -24,11 +24,12 @@ class Plot:
             A = file["mesh"]["X"][:]
             B = file["mesh"]["Y"][:]
             Z = file["mesh"]["Z"][:]
+
             if "trajectory" in file["mesh"]:
                 trajectory = file["mesh"]["trajectory"][:]
             assert A.shape == B.shape == Z.shape
 
-        return Plot((A, B, Z), trajectory)
+            return Plot((A, B, Z), trajectory)
 
     def plot_surface_3D(
         self, cmap: str = "viridis", show: bool = True, file_path: Optional[str] = None
@@ -36,10 +37,21 @@ class Plot:
 
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection="3d")
-        plt.xlabel("alpha")
-        plt.ylabel("beta")
-        ax.set_zlabel("loss")
+
+        fig.patch.set_facecolor("black")
+        ax.set_facecolor("black")
+
+        ax.grid(False)
+
         ax.plot_surface(*self.mesh, cmap=cmap, alpha=0.5)
+
+        ax.set_xlabel("Principle Component 1", color="gray")
+        ax.set_ylabel("Principle Component 2", color="gray")
+        ax.set_zlabel("Loss", color="gray")
+
+        ax.tick_params(axis="x", colors="gray")
+        ax.tick_params(axis="y", colors="gray")
+        ax.tick_params(axis="z", colors="gray")
 
         if file_path is not None:
             plt.savefig(file_path)
@@ -48,80 +60,36 @@ class Plot:
         else:
             plt.close()
 
-    def animate_surface_3D(
-        self,
-        cmap: str = "viridis",
-        fps: int = 5,
-        show: bool = True,
-        file_path: Optional[str] = None,
-    ) -> None:
-
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection="3d")
-        plt.xlabel("alpha")
-        plt.ylabel("beta")
-        ax.set_zlabel("loss")
-        ax.plot_surface(*self.mesh, cmap=cmap, alpha=0.5)
-
-        assert self.trajectory is not None
-        trajectory = self.trajectory.T
-
-        surface = np.array([*self.mesh])
-        pc_0 = trajectory[0]
-        pcx, pcy, pcz = [pc_0[0]], [pc_0[1]], [surface[pc_0[0], [c]]]
-        point = ax.scatter(pcx, pcy, pcz, color="black", s=25, depthshade=False)
-        text = ax.text2D(0.02, 0.95, "", transform=ax.transAxes)
-
-        def update(frame):
-            pc = trajectory[frame]
-            point._offsets3d = ([pc[0]], [pc[1]], [pc[2]])
-            text.set_text(f"Iteration: {frame + 1}")
-            return point, text
-
-        global anim
-        anim = FuncAnimation(
-            fig,
-            update,
-            frames=len(trajectory),
-            blit=True,
-            interval=200,
-            repeat=False,
-        )
-
-        if show:
-            plt.show()
-        if file_path is not None:
-            anim.save(file_path, writer="pillow", fps=fps)
-        plt.close()
-
-    def _get_loss_coord(self, mesh: Mesh, indices: Tuple[int, int]) -> float:
-        X, Y, Z = mesh
-        raise NotImplementedError
-
     def plot_contour(
         self,
-        levels: int = 35,
+        levels: int = 100,
         plot_trajectory: bool = False,
         cmap: str = "viridis",
         show: bool = True,
         file_path: Optional[str] = None,
     ) -> None:
+        fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_facecolor("black")
+        ax.set_facecolor("black")
 
-        _, ax = plt.subplots(figsize=(10, 8))
-        contour = ax.contourf(*self.mesh, cmap=cmap, levels=levels)
-        ax.clabel(contour, inline=1, fontsize=8)
-
+        contour = ax.contourf(*self.mesh, cmap=cmap, levels=levels, antialiased=True)
         if plot_trajectory:
             assert self.trajectory is not None
             x, y = self.trajectory
-            ax.plot(x, y, marker=".")
+            ax.plot(x, y, marker=".", color="dodgerblue", linewidth=2, markersize=8)
 
-        plt.xlabel("principle component 1")
-        plt.ylabel("principle component 2")
-        plt.colorbar(contour, ax=ax, label="loss")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("Principal Component 1", color="white")
+        ax.set_ylabel("Principal Component 2", color="white")
+        cbar = plt.colorbar(contour, ax=ax)
+        cbar.set_label("Loss", color="white")
+        cbar.ax.yaxis.set_tick_params(color="white")
+        plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
+        plt.tight_layout()
 
         if file_path is not None:
-            plt.savefig(file_path)
+            plt.savefig(file_path, facecolor="black", edgecolor="none")
         if show:
             plt.show()
         else:
@@ -129,40 +97,45 @@ class Plot:
 
     def animate_contour(
         self,
-        levels: int = 35,
+        levels: int = 100,
         fps: int = 5,
         cmap: str = "viridis",
         show: bool = True,
         file_path: Optional[str] = None,
     ) -> None:
-        fig, ax = plt.subplots(figsize=(10, 8))
-        contour = ax.contourf(*self.mesh, cmap=cmap, levels=levels)
-        ax.clabel(contour, inline=1, fontsize=8)
 
-        plt.xlabel("alpha")
-        plt.ylabel("beta")
-        plt.colorbar(contour, ax=ax, label="loss")
+        fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_facecolor("black")
+        ax.set_facecolor("black")
+        contour = ax.contourf(*self.mesh, cmap=cmap, levels=levels, antialiased=True)
+
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_xlabel("Principal Component 1", color="white")
+        ax.set_ylabel("Principal Component 2", color="white")
+
+        cbar = plt.colorbar(contour, ax=ax)
+        cbar.set_label("Loss", color="white")
+        cbar.ax.yaxis.set_tick_params(color="white")
+        plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
 
         assert self.trajectory is not None
         trajectory = self.trajectory.T
-
         pc_0 = trajectory[0]
         pcx, pcy = [pc_0[0]], [pc_0[1]]
-        (pathline,) = ax.plot(pcx, pcy, color="blue", lw=1)
-        (point,) = ax.plot(pcx, pcy, "ro", markersize=10)
-        text = ax.text(0.02, 0.95, "", transform=ax.transAxes)
+        (pathline,) = ax.plot(pcx, pcy, color="dodgerblue", lw=2)
+        (point,) = ax.plot(pcx, pcy, "o", color="dodgerblue", markersize=8)
+        text = ax.text(0.02, 0.95, "", transform=ax.transAxes, color="white")
 
         def update(frame):
-
             pc = trajectory[frame]
             pcx.append(pc[0])
             pcy.append(pc[1])
             pathline.set_data(pcx, pcy)
             point.set_data([pcx[-1]], [pcy[-1]])
             text.set_text(f"Iteration: {frame + 1}")
-            return point, text
+            return pathline, point, text
 
-        global anim
         anim = FuncAnimation(
             fig,
             update,
@@ -171,6 +144,8 @@ class Plot:
             interval=200,
             repeat=False,
         )
+
+        plt.tight_layout()
 
         if show:
             plt.show()
