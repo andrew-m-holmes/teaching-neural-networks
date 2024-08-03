@@ -37,6 +37,7 @@ class Trainer:
         epochs: int = 10,
         device: Optional[str] = None,
         print_every: Optional[int] = None,
+        pass_as_kwargs: bool = False,
     ) -> Tuple[Dict[str, List[float]], torch.Tensor]:
 
         verbose = bool(print_every is not None and print_every)
