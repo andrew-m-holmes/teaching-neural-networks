@@ -13,7 +13,7 @@ class Trainer:
     def __init__(
         self,
         model: Model,
-        optim: torch.optim.optimizer.Optimizer,
+        optim: torch.optim.Optimizer,
         loss_fn: Callable[..., torch.Tensor],
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
@@ -45,6 +45,9 @@ class Trainer:
 
     def train(self, epochs: int = 1) -> Dict[str, List[float]]:
 
+        if self.verbose:
+            print("training started")
+
         self.model.to(self.device)
 
         metrics = {
@@ -60,9 +63,6 @@ class Trainer:
         for epoch in range(epochs):
 
             self.model.train()
-            epoch_train_loss, epoch_test_loss = 0, 0
-            epoch_test_acc, epoch_test_acc = 0, 0
-
             for inputs, labels in self.dataloader:
                 inputs = inputs.to(self.device, non_blocking=True)
                 labels = labels.to(self.device, non_blocking=True)
@@ -86,8 +86,19 @@ class Trainer:
             if self.path is not None:
                 self._write_trajectory(epoch + 1)
 
+            if self.verbose and (
+                self.verbose % (epoch + 1) == 0 or (epoch + 1) == self.verbose
+            ):
+                self._epoch_print(epoch, metrics)
+
         if self.path is not None:
             self._write_metrics(metrics)
+
+        if self.verbose:
+            print("training complete")
+
+            if self.path is not None:
+                print(f"metrics written to {self.path}/metrics")
 
         return metrics
 
@@ -117,6 +128,14 @@ class Trainer:
             eval_loss = net_loss / n_batches
 
             return {"eval_loss": eval_loss, "eval_acc": eval_acc}
+
+    def _epoch_print(self, epoch: int, metrics: Dict[str, List[float]]) -> None:
+        print(
+            f"(epoch: {epoch}): train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_acc'][-1]:.4f}, test acc: {metrics['test_acc'][-1]:.4f}"
+        )
+
+        if self.path is not None:
+            print(f"weights saved to {self.path}/trajectory/weights-epoch-{epoch}")
 
     def _write_trajectory(self, epoch: int) -> None:
         if self.path is None:
