@@ -50,7 +50,6 @@ class Landscape:
         self,
         dataloder: data.DataLoader,
         mode: str = "filter",
-        custom_dirs: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         resolution: int = 25,
         bounds: Tuple[float, float] = (-10.0, 10.0),
         device: Optional[str] = None,
@@ -65,9 +64,6 @@ class Landscape:
             dir1, dir2 = self.filter_norm()
         elif mode == "pca":
             dir1, dir2, trajectory = self.pca()
-        elif mode == "custom":
-            assert custom_dirs is not None
-            dir1, dir2 = custom_dirs
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
