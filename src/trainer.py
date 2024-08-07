@@ -32,12 +32,6 @@ class Trainer:
             verbose = False
         else:
             verbose = int(verbose)
-        if path is not None:
-            if os.path.exists(path):
-                os.remove(path)
-            else:
-                dirname = os.path.dirname(path)
-                os.makedirs(dirname, exist_ok=True)
 
         self.model = model
         self.optim = optim
@@ -52,6 +46,11 @@ class Trainer:
 
         if self.verbose:
             print("training started")
+        if self.path is not None and os.path.exists(self.path):
+            os.remove(self.path)
+        elif self.path is not None:
+            dirname = os.path.dirname(self.path)
+            os.makedirs(dirname, exist_ok=True)
 
         self.model.to(self.device)
 
@@ -62,10 +61,15 @@ class Trainer:
             "test_accs": [],
         }
 
+        n_batches = len(self.dataloader)
+        n_samples = sum(batch[1].size(0) for batch in self.dataloader)
+
         if self.path is not None:
             self._write_trajectory(epoch=0)
 
         for epoch in range(epochs):
+
+            epoch_train_loss, epoch_train_acc = 0, 0
 
             self.model.train()
             for inputs, labels in self.dataloader:
@@ -78,7 +82,11 @@ class Trainer:
                 loss.backward()
                 self.optim.step()
 
-            epoch_train_loss, epoch_train_acc = self.evaluate(self.dataloader).values()
+                epoch_train_loss += loss.item()
+                epoch_train_acc += self._get_correct(logits, labels)
+
+            epoch_train_loss /= n_batches
+            epoch_train_acc /= n_samples
             epoch_test_loss, epoch_test_acc = self.evaluate(
                 self.eval_dataloader
             ).values()
@@ -112,9 +120,9 @@ class Trainer:
             self.model.eval()
 
             n_batches = len(dataloader)
-            n_samples = 0
-            net_correct = 0
+            n_samples = sum(batch[1].size(0) for batch in dataloader)
             net_loss = 0
+            net_correct = 0
 
             for inputs, labels in dataloader:
                 inputs = inputs.to(self.device, non_blocking=True)
@@ -123,15 +131,16 @@ class Trainer:
                 logits = self.model(inputs).get("logits")
                 loss = self.loss_fn(logits, labels)
                 net_loss += loss.item()
+                net_correct += self._get_correct(logits, labels)
 
-                correct = torch.argmax(logits, dim=-1).eq(labels).sum()
-                net_correct += correct.item()
-                n_samples += labels.size(0)
-
-            eval_acc = net_correct / n_samples
             eval_loss = net_loss / n_batches
+            eval_acc = net_correct / n_samples
 
             return {"eval_loss": eval_loss, "eval_acc": eval_acc}
+
+    def _get_correct(self, logits: torch.Tensor, labels: torch.Tensor) -> float:
+        correct = torch.argmax(logits, dim=-1).eq(labels).sum()
+        return correct.item()
 
     def _epoch_print(self, epoch: int, metrics: Dict[str, List[float]]) -> None:
         print(
