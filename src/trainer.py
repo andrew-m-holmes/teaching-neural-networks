@@ -28,11 +28,16 @@ class Trainer:
                 if torch.cuda.is_available()
                 else "mps" if torch.backends.mps.is_available() else "cpu"
             )
-        if verbose is None or verbose <= 0:
+        if not verbose or verbose < 0:
             verbose = False
+        else:
+            verbose = int(verbose)
         if path is not None:
-            dirname = os.path.dirname(path)
-            os.makedirs(dirname, exist_ok=True)
+            if os.path.exists(path):
+                os.remove(path)
+            else:
+                dirname = os.path.dirname(path)
+                os.makedirs(dirname, exist_ok=True)
 
         self.model = model
         self.optim = optim
@@ -68,7 +73,7 @@ class Trainer:
                 labels = labels.to(self.device, non_blocking=True)
 
                 self.optim.zero_grad()
-                logits = self.model(inputs)
+                logits = self.model(inputs).get("logits")
                 loss = self.loss_fn(logits, labels)
                 loss.backward()
                 self.optim.step()
@@ -87,18 +92,17 @@ class Trainer:
                 self._write_trajectory(epoch + 1)
 
             if self.verbose and (
-                self.verbose % (epoch + 1) == 0 or (epoch + 1) == self.verbose
+                (epoch + 1) % self.verbose == 0 or (epoch + 1) == self.verbose
             ):
-                self._epoch_print(epoch, metrics)
+                self._epoch_print(epoch + 1, metrics)
 
         if self.path is not None:
             self._write_metrics(metrics)
+            if self.verbose:
+                print(f"metrics written to {self.path}/metrics")
 
         if self.verbose:
             print("training complete")
-
-            if self.path is not None:
-                print(f"metrics written to {self.path}/metrics")
 
         return metrics
 
@@ -116,7 +120,7 @@ class Trainer:
                 inputs = inputs.to(self.device, non_blocking=True)
                 labels = labels.to(self.device, non_blocking=True)
 
-                logits = self.model(**inputs).get("logits")
+                logits = self.model(inputs).get("logits")
                 loss = self.loss_fn(logits, labels)
                 net_loss += loss.item()
 
@@ -131,7 +135,7 @@ class Trainer:
 
     def _epoch_print(self, epoch: int, metrics: Dict[str, List[float]]) -> None:
         print(
-            f"(epoch: {epoch}): train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_acc'][-1]:.4f}, test acc: {metrics['test_acc'][-1]:.4f}"
+            f"(epoch: {epoch}): train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_accs'][-1]:.4f}, test acc: {metrics['test_accs'][-1]:.4f}"
         )
 
         if self.path is not None:

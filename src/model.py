@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from typing import Any
+from typing import Any, Dict
 
 
 class Model(nn.Module):
@@ -11,8 +11,12 @@ class Model(nn.Module):
         super().__init__()
         self.model = model
 
-    def forward(self, inputs: Any) -> Any:
-        return self.model(**inputs)
+    def forward(self, inputs: Any) -> Dict[str, Any]:
+        return (
+            self.model(inputs)
+            if isinstance(inputs, torch.Tensor)
+            else self.model(**inputs)
+        )
 
     def get_flat_weights(self) -> np.ndarray:
         return torch.cat(
@@ -26,7 +30,9 @@ class Model(nn.Module):
 
     def load_flat_weights(self, weights: np.ndarray) -> None:
         i = 0
-        for parameter in filter(lambda p: p.requires_grad, self.model.parameters()):
+        for parameter in filter(
+            lambda p: p.requires_grad == True, self.model.parameters()
+        ):
             shape = parameter.shape
             j = i + parameter.numel()
             new_parameter = torch.from_numpy(weights[i:j].reshape(shape))
