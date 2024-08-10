@@ -83,7 +83,7 @@ class Trainer:
                 self.optim.step()
 
                 epoch_train_loss += loss.item()
-                epoch_train_acc += self._get_correct(logits, labels)
+                epoch_train_acc += self._compute_correct(logits, labels)
 
             epoch_train_loss /= n_batches
             epoch_train_acc /= n_samples
@@ -131,14 +131,14 @@ class Trainer:
                 logits = self.model(inputs).get("logits")
                 loss = self.loss_fn(logits, labels)
                 net_loss += loss.item()
-                net_correct += self._get_correct(logits, labels)
+                net_correct += self._compute_correct(logits, labels)
 
             eval_loss = net_loss / n_batches
             eval_acc = net_correct / n_samples
 
             return {"eval_loss": eval_loss, "eval_acc": eval_acc}
 
-    def _get_correct(self, logits: torch.Tensor, labels: torch.Tensor) -> float:
+    def _compute_correct(self, logits: torch.Tensor, labels: torch.Tensor) -> float:
         correct = torch.argmax(logits, dim=-1).eq(labels).sum()
         return correct.item()
 
@@ -157,9 +157,10 @@ class Trainer:
         weights = self.model.get_flat_weights()
         with h5py.File(self.path, mode="a") as file:
             if not epoch:
-                file.create_group("trajectory")
+                trajectory_group = file.create_group("trajectory")
             trajectory_group = file.get("trajectory")
             assert isinstance(trajectory_group, h5py.Group)
+
             trajectory_group.create_dataset(
                 name=f"weights-epoch-{epoch}", data=weights, dtype=np.float32
             )

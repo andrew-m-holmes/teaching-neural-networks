@@ -1,204 +1,196 @@
 import h5py
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.utils.data as data
 
 from sklearn.decomposition import PCA
-from typing import Callable, Tuple, Optional
+from typing import Callable, Tuple, Optional, Dict, Union
+from .model import Model
 
 
-Mesh = Tuple[np.ndarray, np.ndarray, np.ndarray]
-
-
-class Landscape:
+class MeshGrid:
 
     def __init__(
         self,
-        model: nn.Module,
+        model: Model,
+        trajectory: np.ndarray,
         loss_fn: Callable[..., torch.Tensor],
-        trajectory: Optional[torch.Tensor] = None,
-        write: bool = True,
-        file_path: Optional[str] = None,
-    ) -> None:
-
-        self.model = model.cpu()
-        self.loss_fn = loss_fn
-        self.trajectory = trajectory
-        self.write = write
-        self.file_path = file_path
-
-    @staticmethod
-    def from_files(
-        model,
-        loss_fn: Callable[..., torch.Tensor],
-        param_path: str,
-        traj_path: Optional[str] = None,
-        write: bool = True,
-        file_path: Optional[str] = None,
-    ) -> "Landscape":
-
-        state_dict = torch.load(param_path, map_location="cpu")
-        model.load_state_dict(state_dict)
-        trajectory = (
-            torch.load(traj_path, map_location="cpu") if traj_path is not None else None
-        )
-
-        return Landscape(model, loss_fn, trajectory, write, file_path)
-
-    def create_landscape(
-        self,
-        dataloder: data.DataLoader,
-        mode: str = "filter",
-        resolution: int = 25,
-        bounds: Tuple[float, float] = (-10.0, 10.0),
+        eval_dataloader: data.DataLoader,
         device: Optional[str] = None,
-        print_every: Optional[int] = None,
-    ) -> Tuple[Mesh, Optional[np.ndarray]]:
-
-        mode = mode.lower().strip()
-        dir1, dir2 = torch.empty(0), torch.empty(0)
-        trajectory = None
-
-        if mode == "filter":
-            dir1, dir2 = self.filter_norm()
-        elif mode == "pca":
-            dir1, dir2, trajectory = self.pca()
+        path: Optional[str] = None,
+        verbose: Optional[Union[int, bool]] = None,
+    ) -> None:
+        if device is None:
+            device = (
+                "cuda"
+                if torch.cuda.is_available()
+                else "mps" if torch.backends.mps.is_available() else "cpu"
+            )
+        if not verbose or verbose < 0:
+            verbose = False
         else:
-            raise ValueError(f"Invalid mode: {mode}")
+            verbose = int(verbose)
 
-        x_coord = torch.linspace(*bounds, steps=resolution)
-        y_coord = torch.linspace(*bounds, steps=resolution)
-        X, Y = torch.meshgrid(x_coord, y_coord, indexing="ij")
-        Z = torch.zeros((resolution, resolution))
+        self.model = model
+        self.trajectory = trajectory
+        self.loss_fn = loss_fn
+        self.eval_dataloader = eval_dataloader
+        self.device = device
+        self.path = path
+        self.verbose = verbose
 
-        trained_parameters = self.flat_parameters()
+    def create_mesh_grid(
+        self,
+        resolution: int = 25,
+        endpoints: Tuple[float, float] = (-10.0, 10.0),
+        mode: str = "pca",
+    ) -> Dict[
+        str, Union[Tuple[np.ndarray, np.ndarray, np.ndarray], Optional[np.ndarray]]
+    ]:
+        mode = mode.lower().strip()
+        if mode not in ("pca", "random"):
+            raise ValueError(
+                f"Invalid usage of mode parameter, mode can be ('pca', 'random')"
+            )
+
+        if mode == "pca":
+            data = self._compute_pca_directions()
+        else:
+            data = self._compute_random_directions()
+
+        x_coordinates = np.linspace(*endpoints, num=resolution)
+        y_coordinates = np.linspace(*endpoints, num=resolution)
+        X, Y = np.meshgrid(x_coordinates, y_coordinates, indexing="ij")
+        Z = np.zeros((resolution, resolution))
+
+        x_direction, y_direction = data.get("directions", (None, None))
+        trained_weights = self.model.get_flat_weights()
+
         for i in range(resolution):
             for j in range(resolution):
 
-                new_parameters = trained_parameters + X[i][j] * dir1 + Y[i][j] * dir2
-                self.assign_parameters(new_parameters)
-                loss = self.compute_loss(dataloder, device)
+                perturbed_weights = (
+                    trained_weights + X[i][j] * x_direction + Y[i][j] * y_direction
+                )
+
+                loss = self._sample_loss_from_perturbation(perturbed_weights)
                 Z[i][j] = loss
-                self.assign_parameters(trained_parameters)
 
-                iters = i * resolution + j + 1
-                if print_every and (
-                    (iters % print_every == 0 and iters != 1) or iters == print_every
-                ):
-                    print(f"Iteration: {iters}, loss: {loss:.4f}")
+        self.model.load_flat_weights(trained_weights)
 
-        X, Y, Z = X.numpy(), Y.numpy(), Z.numpy()
-        if self.write:
-            self.write_file(
-                (X, Y, Z),
-                trajectory=trajectory,
-                file_path=self.file_path,
-                verbose=bool(print_every),
-            )
-        return (X, Y, Z), trajectory
+        mesh_grid = (X, Y, Z)
+        return {
+            "mesh_grid": mesh_grid,
+            "variances": data.get("variances"),
+        }
 
-    def compute_loss(
+    def _sample_loss_from_perturbation(self, peturbed_weights: np.ndarray) -> float:
+        with torch.no_grad():
+            self.model.eval()
+            self.model.load_flat_weights(peturbed_weights)
+            self.model.to(self.device)
+
+            n_batches = len(self.eval_dataloader)
+            net_loss = 0
+
+            for inputs, labels in self.eval_dataloader:
+                inputs = inputs.to(self.device, non_blocking=True)
+                labels = labels.to(self.device, non_blocking=True)
+
+                logits = self.model(inputs).get("logits")
+                loss = self.loss_fn(logits, labels)
+                net_loss += loss.item()
+
+            self.model.cpu()
+            return net_loss / n_batches
+
+    def _compute_pca_directions(
         self,
-        dataloader: data.DataLoader,
-        device: Optional[str] = None,
-    ) -> float:
-        self.model.eval()
-
-        with torch.no_grad():
-
-            total_loss = 0
-
-            for inputs, labels in dataloader:
-                inputs = inputs.to(device, non_blocking=True)
-                labels = labels.to(device, non_blocking=True)
-                outputs = self.model(inputs)
-                loss = self.loss_fn(outputs, labels)
-                total_loss += loss.item()
-
-            return total_loss / len(dataloader)
-
-    def assign_parameters(self, new_parameters: torch.Tensor) -> None:
-
-        start = 0
-        for param in self.model.parameters():
-            if not param.requires_grad:
-                continue
-
-            end = start + param.numel()
-            param_slice = new_parameters[start:end].reshape(param.size())
-            param.data = param_slice
-            start = end
-
-    def flat_parameters(self) -> torch.Tensor:
-        return torch.cat(
-            [
-                p.flatten().detach().clone()
-                for p in self.model.parameters()
-                if p.requires_grad
-            ]
-        )
-
-    def filter_norm(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        dir1, dir2 = [], []
-
-        with torch.no_grad():
-
-            for param in self.model.parameters():
-                if not param.requires_grad:
-                    continue
-
-                vec1 = torch.randn_like(param).flatten()
-                vec1 = vec1 * param.norm() / vec1.norm()
-                vec2 = torch.randn_like(param).flatten()
-                vec2 = vec2 * param.norm() / vec2.norm()
-
-                dir1.append(vec1)
-                dir2.append(vec2)
-
-            return torch.cat(dir1), torch.cat(dir2)
-
-    def pca(self) -> Tuple[torch.Tensor, torch.Tensor, np.ndarray]:
-        assert self.trajectory is not None
-        diff_matrix = self.trajectory - self.flat_parameters()
+    ) -> Dict[str, Union[Tuple[np.ndarray, np.ndarray], np.ndarray]]:
+        train_variance_matrix = self.trajectory - self.model.get_flat_weights()
         pca = PCA(n_components=2)
-        trajectory = pca.fit_transform(diff_matrix.numpy())
 
-        return (
-            torch.from_numpy(pca.components_[0]),
-            torch.from_numpy(pca.components_[1]),
-            trajectory.T,
-        )
+        optim_path = pca.fit_transform(train_variance_matrix)
+        components = pca.components_
+        variance = pca.explained_variance_ratio_
+        return {
+            "optim_path": optim_path,
+            "directions": components,
+            "variance": variance,
+        }
 
-    def write_file(
+    def _compute_random_directions(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
+        directions_x, directions_y = [], []
+        for weight in self.model.parameters():
+            w_norm = weight.flatten().norm().numpy()
+
+            x = np.random.randn(weight.numel())
+            x *= w_norm / np.linalg.norm(x)
+
+            y = np.random.randn(weight.numel())
+            y *= w_norm / np.linalg.norm(y)
+
+            directions_x.append(x)
+            directions_y.append(y)
+
+        return {
+            "directions": (
+                np.concat(directions_x, axis=0),
+                np.concat(directions_y, axis=0),
+            )
+        }
+
+    def _write_meshgrid(
         self,
-        mesh: Mesh,
-        trajectory: Optional[np.ndarray] = None,
-        file_path: Optional[str] = None,
-        verbose: bool = True,
+        meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
+        variance: Optional[np.ndarray] = None,
     ) -> None:
-        if file_path is None:
-            file_path = "./landscape.h5"
+        if self.path is None:
+            raise ValueError("'path' is None")
 
-        if verbose:
-            print(f"Writing to f{file_path}")
+        with h5py.File(self.path, mode="a") as file:
+            meshgrid_group = file.get("meshgrid")
+            if not isinstance(meshgrid_group, h5py.Group):
+                meshgrid_group = file.create_group("meshgrid")
 
-        X, Y, Z = mesh
-        with h5py.File(file_path, mode="w") as file:
-            mesh_group = file.create_group("mesh")
-            mesh_group.create_dataset("X", data=X)
-            mesh_group.create_dataset("Y", data=Y)
-            mesh_group.create_dataset("Z", data=Z)
+            X, Y, Z = meshgrid
+            meshgrid_group.create_dataset(name="X", data=X, dtype=np.float32)
+            meshgrid_group.create_dataset(name="Y", data=Y, dtype=np.float32)
+            meshgrid_group.create_dataset(name="Z", data=Z, dtype=np.float32)
 
-            if trajectory is not None:
-                mesh_group.create_dataset("trajectory", data=trajectory)
+            if variance is not None:
+                meshgrid_group.create_dataset(
+                    name="variance", data=variance, dtype=np.float32
+                )
 
-        if verbose:
-            print(f"{file_path} written")
+    @classmethod
+    def from_files(
+        cls,
+        trainer_path: str,
+        model: Model,
+        loss_fn: Callable[..., torch.Tensor],
+        eval_dataloader: data.DataLoader,
+        device: Optional[str] = None,
+        path: Optional[str] = None,
+        verbose: Optional[Union[bool, int]] = None,
+    ) -> "MeshGrid":
 
+        with h5py.File(trainer_path, mode="r") as file:
+            trajectory_group = file.get("trajectory")
+            assert isinstance(trajectory_group, h5py.Group)
+            weight_states = np.concatenate(
+                [w for w in trajectory_group.values()], axis=0
+            )
 
-if __name__ == "__main__":
-
-    x = torch.randn(9)
-    y = x.reshape(3, 3)
-    assert x.norm() == y.norm()
+            trajectory = weight_states[:-1]
+            final_weights = trajectory[-1]
+            model.load_flat_weights(final_weights)
+            return cls(
+                model,
+                trajectory,
+                loss_fn,
+                eval_dataloader,
+                device=device,
+                path=path,
+                verbose=verbose,
+            )
