@@ -46,13 +46,14 @@ class Trainer:
 
         if self.verbose:
             print("training started")
-        if self.path is not None and os.path.exists(self.path):
-            os.remove(self.path)
-        elif self.path is not None:
+        if self.path is not None:
             dirname = os.path.dirname(self.path)
             os.makedirs(dirname, exist_ok=True)
 
         self.model.to(self.device)
+
+        if self.verbose:
+            print(f"model using {self.device}")
 
         metrics = {
             "train_losses": [],
@@ -65,7 +66,7 @@ class Trainer:
         n_samples = sum(batch[1].size(0) for batch in self.dataloader)
 
         if self.path is not None:
-            self._write_trajectory(epoch=0)
+            self._write_trajectory(epoch=0, verbose=bool(self.verbose))
 
         for epoch in range(epochs):
 
@@ -96,21 +97,19 @@ class Trainer:
             metrics["train_accs"].append(epoch_train_acc)
             metrics["test_accs"].append(epoch_test_acc)
 
-            if self.path is not None:
-                self._write_trajectory(epoch + 1)
-
             if self.verbose and (
                 (epoch + 1) % self.verbose == 0 or (epoch + 1) == self.verbose
             ):
                 self._epoch_print(epoch + 1, metrics)
 
-        if self.path is not None:
-            self._write_metrics(metrics)
-            if self.verbose:
-                print(f"metrics written to {self.path}/metrics")
+            if self.path is not None:
+                self._write_trajectory(epoch + 1, verbose=bool(self.verbose))
 
         if self.verbose:
             print("training complete")
+
+        if self.path is not None:
+            self._write_metrics(metrics, verbose=bool(self.verbose))
 
         return metrics
 
@@ -144,34 +143,48 @@ class Trainer:
 
     def _epoch_print(self, epoch: int, metrics: Dict[str, List[float]]) -> None:
         print(
-            f"(epoch: {epoch}): train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_accs'][-1]:.4f}, test acc: {metrics['test_accs'][-1]:.4f}"
+            f"(epoch: {epoch}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_accs'][-1]:.4f}, test acc: {metrics['test_accs'][-1]:.4f})"
         )
 
-        if self.path is not None:
-            print(f"weights saved to {self.path}/trajectory/weights-epoch-{epoch}")
-
-    def _write_trajectory(self, epoch: int) -> None:
+    def _write_trajectory(self, epoch: int, verbose: bool = False) -> None:
         if self.path is None:
             raise RuntimeError("'path' is None")
 
         weights = self.model.get_flat_weights()
         with h5py.File(self.path, mode="a") as file:
             if not epoch:
-                trajectory_group = file.create_group("trajectory")
-            trajectory_group = file.get("trajectory")
-            assert isinstance(trajectory_group, h5py.Group)
+                trajectory_group = _get_group("trajectory", file, clear=True)
+            else:
+                trajectory_group = _get_group("trajectory", file, clear=False)
+
+            if verbose:
+                print(f"weights saved to {self.path}/trajectory/weights-epoch-{epoch}")
 
             trajectory_group.create_dataset(
                 name=f"weights-epoch-{epoch}", data=weights, dtype=np.float32
             )
 
-    def _write_metrics(self, metrics: Dict[str, List[float]]) -> None:
+    def _write_metrics(
+        self, metrics: Dict[str, List[float]], verbose: bool = False
+    ) -> None:
         if self.path is None:
             raise RuntimeError("'path' is None")
 
         with h5py.File(self.path, mode="a") as file:
-            metrics_group = file.create_group("metrics")
+            metrics_group = _get_group("metrics", file, clear=True)
             for name, metric in metrics.items():
                 metrics_group.create_dataset(
                     name=name, data=np.array(metric), dtype=np.float32
                 )
+
+                if verbose:
+                    print(f"{name} saved to {self.path}/metrics/{name}")
+
+
+def _get_group(name: str, file: h5py.File, clear: bool = False) -> h5py.Group:
+    group = file.get(name)
+    if isinstance(group, h5py.Group):
+        if clear:
+            group.clear()
+        return group
+    return file.create_group(name)
