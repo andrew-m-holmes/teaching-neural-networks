@@ -8,7 +8,7 @@ setup(
     version="0.1.0",
     author="Andrew Holmes",
     author_email="andrewholmes011002@gmail.com",
-    url="https://github.com/andrew-m-holmes/teach-neural-networks",
+    url="https://github.com/andrew-m-holmes/teaching-neural-networks",
     python_requires=">=3.9",
     packages=find_packages(exclude=["*venv*"]),
     install_requires=requirements,

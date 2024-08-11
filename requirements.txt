@@ -1,5 +1,6 @@
 bertviz
 datasets
+h5py
 jupyter
 jupyterlab
 numpy

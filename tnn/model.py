@@ -1,6 +1,6 @@
-import numpy as np
 import torch
 import torch.nn as nn
+import numpy as np
 
 from typing import Any, Dict
 
@@ -35,6 +35,6 @@ class Model(nn.Module):
         ):
             shape = parameter.shape
             j = i + parameter.numel()
-            new_parameter = torch.from_numpy(weights[i:j].reshape(shape))
+            new_parameter = torch.from_numpy(weights[i:j].reshape(shape)).float()
             parameter.data = new_parameter
             i = j

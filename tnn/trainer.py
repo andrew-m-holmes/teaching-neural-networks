@@ -1,11 +1,12 @@
 import os
 import h5py
-import numpy as np
+import tnn
 import torch
 import torch.utils.data as data
+import numpy as np
 
-from typing import Union, List, Callable, Optional, Dict
 from .model import Model
+from typing import Union, List, Callable, Optional, Dict
 
 
 class Trainer:
@@ -43,18 +44,16 @@ class Trainer:
         self.verbose = verbose
 
     def train(self, epochs: int = 1) -> Dict[str, List[float]]:
-
-        if self.verbose:
-            print("training started")
         if self.path is not None:
             dirname = os.path.dirname(self.path)
             os.makedirs(dirname, exist_ok=True)
 
         self.model.to(self.device)
-
         if self.verbose:
             print(f"model using {self.device}")
 
+        n_batches = len(self.dataloader)
+        n_samples = sum(batch[1].size(0) for batch in self.dataloader)
         metrics = {
             "train_losses": [],
             "test_losses": [],
@@ -62,14 +61,12 @@ class Trainer:
             "test_accs": [],
         }
 
-        n_batches = len(self.dataloader)
-        n_samples = sum(batch[1].size(0) for batch in self.dataloader)
-
         if self.path is not None:
             self._write_trajectory(epoch=0, verbose=bool(self.verbose))
 
+        if self.verbose:
+            print("training started")
         for epoch in range(epochs):
-
             epoch_train_loss, epoch_train_acc = 0, 0
 
             self.model.train()
@@ -114,7 +111,6 @@ class Trainer:
         return metrics
 
     def evaluate(self, dataloader: data.DataLoader) -> Dict[str, float]:
-
         with torch.no_grad():
             self.model.eval()
 
@@ -153,9 +149,9 @@ class Trainer:
         weights = self.model.get_flat_weights()
         with h5py.File(self.path, mode="a") as file:
             if not epoch:
-                trajectory_group = _get_group("trajectory", file, clear=True)
+                trajectory_group = tnn._get_group("trajectory", file, clear=True)
             else:
-                trajectory_group = _get_group("trajectory", file, clear=False)
+                trajectory_group = tnn._get_group("trajectory", file, clear=False)
 
             if verbose:
                 print(f"weights saved to {self.path}/trajectory/weights-epoch-{epoch}")
@@ -171,7 +167,7 @@ class Trainer:
             raise RuntimeError("'path' is None")
 
         with h5py.File(self.path, mode="a") as file:
-            metrics_group = _get_group("metrics", file, clear=True)
+            metrics_group = tnn._get_group("metrics", file, clear=True)
             for name, metric in metrics.items():
                 metrics_group.create_dataset(
                     name=name, data=np.array(metric), dtype=np.float32
@@ -179,12 +175,3 @@ class Trainer:
 
                 if verbose:
                     print(f"{name} saved to {self.path}/metrics/{name}")
-
-
-def _get_group(name: str, file: h5py.File, clear: bool = False) -> h5py.Group:
-    group = file.get(name)
-    if isinstance(group, h5py.Group):
-        if clear:
-            group.clear()
-        return group
-    return file.create_group(name)

@@ -1,14 +1,16 @@
+import tnn
+import os
 import h5py
-import numpy as np
 import torch
 import torch.utils.data as data
+import numpy as np
 
-from sklearn.decomposition import PCA
-from typing import Callable, Tuple, Optional, Dict, Union
 from .model import Model
+from sklearn.decomposition import PCA
+from typing import Callable, Tuple, Optional, Dict, Union, Any
 
 
-class MeshGrid:
+class Landscape:
 
     def __init__(
         self,
@@ -39,20 +41,27 @@ class MeshGrid:
         self.path = path
         self.verbose = verbose
 
-    def create_mesh_grid(
+    def create_meshgrid(
         self,
         resolution: int = 25,
         endpoints: Tuple[float, float] = (-10.0, 10.0),
         mode: str = "pca",
     ) -> Dict[
-        str, Union[Tuple[np.ndarray, np.ndarray, np.ndarray], Optional[np.ndarray]]
+        str,
+        Union[
+            Tuple[np.ndarray, np.ndarray, np.ndarray],
+            Tuple[np.ndarray, np.ndarray],
+            Optional[np.ndarray],
+        ],
     ]:
         mode = mode.lower().strip()
         if mode not in ("pca", "random"):
             raise ValueError(
-                f"Invalid usage of mode parameter, mode can be ('pca', 'random')"
+                f"Invalid usage of 'mode' parameter, mode can be ('pca', 'random')"
             )
 
+        if self.verbose:
+            print(f"meshgrid creation using {mode}\nmodel using {self.device}")
         if mode == "pca":
             data = self._compute_pca_directions()
         else:
@@ -63,9 +72,13 @@ class MeshGrid:
         X, Y = np.meshgrid(x_coordinates, y_coordinates, indexing="ij")
         Z = np.zeros((resolution, resolution))
 
-        x_direction, y_direction = data.get("directions", (None, None))
+        directions = data.get("directions")
+        assert directions is not None
+        x_direction, y_direction = directions
         trained_weights = self.model.get_flat_weights()
 
+        if self.verbose:
+            print(f"meshgrid creation started")
         for i in range(resolution):
             for j in range(resolution):
 
@@ -76,12 +89,27 @@ class MeshGrid:
                 loss = self._sample_loss_from_perturbation(perturbed_weights)
                 Z[i][j] = loss
 
-        self.model.load_flat_weights(trained_weights)
+                if self.verbose:
+                    n_iter = i * resolution + j + 1
+                    if (n_iter % self.verbose == 0 and n_iter > 1) or (
+                        n_iter == self.verbose
+                    ):
+                        print(f"(iter: {n_iter}): iter loss: {loss:.4f}")
 
-        mesh_grid = (X, Y, Z)
+        self.model.load_flat_weights(trained_weights)
+        if self.verbose:
+            print("meshgrid creation complete")
+
+        meshgrid = (X, Y, Z)
+
+        if self.path is not None:
+            dirname = os.path.dirname(__file__)
+            os.makedirs(dirname, exist_ok=True)
+            self._write_landscape(meshgrid, data, bool(self.verbose))
         return {
-            "mesh_grid": mesh_grid,
-            "variances": data.get("variances"),
+            "meshgrid": meshgrid,
+            "optim_path": data.get("optim_path"),
+            "variance": data.get("variance"),
         }
 
     def _sample_loss_from_perturbation(self, peturbed_weights: np.ndarray) -> float:
@@ -140,31 +168,56 @@ class MeshGrid:
             )
         }
 
-    def _write_meshgrid(
+    def _write_landscape(
         self,
         meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
-        variance: Optional[np.ndarray] = None,
+        data: Dict[str, Any],
+        verbose: bool = False,
     ) -> None:
         if self.path is None:
             raise ValueError("'path' is None")
 
         with h5py.File(self.path, mode="a") as file:
-            meshgrid_group = file.get("meshgrid")
-            if not isinstance(meshgrid_group, h5py.Group):
-                meshgrid_group = file.create_group("meshgrid")
-
+            landscape_group = tnn._get_group("landscape", file, clear=True)
+            meshgrid_group = tnn._get_group("meshgrid", landscape_group, clear=True)
             X, Y, Z = meshgrid
-            meshgrid_group.create_dataset(name="X", data=X, dtype=np.float32)
-            meshgrid_group.create_dataset(name="Y", data=Y, dtype=np.float32)
-            meshgrid_group.create_dataset(name="Z", data=Z, dtype=np.float32)
+            meshgrid_dict = {"X": X, "Y": Y, "Z": Z}
 
-            if variance is not None:
-                meshgrid_group.create_dataset(
-                    name="variance", data=variance, dtype=np.float32
-                )
+            for name, arr in meshgrid_dict.items():
+                meshgrid_group.create_dataset(name=name, data=arr, dtype=np.float32)
+                if verbose:
+                    print(
+                        f"meshgrid array axis {name} saved to {self.path}/landscape/meshgrid/{name}"
+                    )
+
+            metadata_group = tnn._get_group("metadata", landscape_group, clear=True)
+            for name, data in data.items():
+                if name == "directions":
+                    x_direction, y_direction = data
+                    metadata_group.create_dataset(
+                        name="x_direction", data=x_direction, dtype=np.float32
+                    )
+                    metadata_group.create_dataset(
+                        name="y_direction", data=y_direction, dtype=np.float32
+                    )
+
+                    if self.verbose:
+                        print(
+                            f"x_direction saved to {self.path}/landscape/metadata/x_direction"
+                        )
+                        print(
+                            f"y_direction saved to {self.path}/landscape/metadata/y_direction"
+                        )
+
+                else:
+                    metadata_group.create_dataset(
+                        name=name, data=data, dtype=np.float32
+                    )
+                    if self.verbose:
+                        print(f"{name} saved to {self.path}/landscape/metadata/{name}")
 
     @classmethod
-    def from_files(
+    def from_file(
         cls,
         trainer_path: str,
         model: Model,
@@ -173,14 +226,15 @@ class MeshGrid:
         device: Optional[str] = None,
         path: Optional[str] = None,
         verbose: Optional[Union[bool, int]] = None,
-    ) -> "MeshGrid":
+    ) -> "Landscape":
 
         with h5py.File(trainer_path, mode="r") as file:
             trajectory_group = file.get("trajectory")
-            assert isinstance(trajectory_group, h5py.Group)
-            weight_states = np.concatenate(
-                [w for w in trajectory_group.values()], axis=0
-            )
+            if not isinstance(trajectory_group, h5py.Group):
+                raise RuntimeError(
+                    "Could not find trajectory group to create Landscape"
+                )
+            weight_states = np.stack([w for w in trajectory_group.values()], axis=0)
 
             trajectory = weight_states[:-1]
             final_weights = trajectory[-1]
