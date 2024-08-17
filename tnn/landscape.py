@@ -97,7 +97,12 @@ class Landscape:
         if self.path is not None:
             dirname = os.path.dirname(__file__)
             os.makedirs(dirname, exist_ok=True)
-            self._write_landscape(meshgrid, data, bool(self.verbose))
+            self._write_landscape(
+                meshgrid,
+                optim_path=data.get("optim_path"),
+                variance=data.get("variance"),
+                verbose=bool(self.verbose),
+            )
         return {
             "meshgrid": meshgrid,
             "optim_path": data.get("optim_path"),
@@ -160,7 +165,8 @@ class Landscape:
     def _write_landscape(
         self,
         meshgrid: np.ndarray,
-        data: Dict[str, np.ndarray],
+        optim_path: Optional[np.ndarray] = None,
+        variance: Optional[np.ndarray] = None,
         verbose: bool = False,
     ) -> None:
         if self.path is None:
@@ -174,10 +180,23 @@ class Landscape:
             if verbose:
                 print(f"meshgrid saved to {self.path}/landscape/meshgrid")
 
-            for name, arr in data.items():
-                landscape_group.create_dataset(name=name, data=arr, dtype=np.float32)
+            if optim_path is not None:
+                landscape_group.create_dataset(
+                    name="optim_path", data=optim_path, dtype=np.float32
+                )
                 if self.verbose:
-                    print(f"{name} saved to {self.path}/landscape/{name}")
+                    print(
+                        f"optimizer path was saved to {self.path}/landscape/optim_path"
+                    )
+
+            if variance is not None:
+                landscape_group.create_dataset(
+                    name="variance", data=variance, dtype=np.float32
+                )
+                if self.verbose:
+                    print(
+                        f"principle component variance was saved to {self.path}/landscape/variance"
+                    )
 
     @classmethod
     def from_file(

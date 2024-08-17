@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from matplotlib.animation import FuncAnimation
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 
 plt.style.use("dark_background")
 
@@ -10,11 +10,12 @@ plt.style.use("dark_background")
 def plot_metrics(
     metrics: Dict[str, np.ndarray],
     colors: Optional[List[str]] = None,
-    path: Optional[str] = None,
     title: Optional[str] = None,
     xlabel: str = "epoch",
     ylabel: str = "loss",
-    figsize: tuple = (12, 8),
+    figsize: Tuple[int, int] = (12, 8),
+    show: bool = True,
+    path: Optional[str] = None,
 ) -> None:
     plt.figure(figsize=figsize)
 
@@ -42,21 +43,19 @@ def plot_metrics(
     if title:
         plt.title(title)
     plt.legend(loc="best")
-    plt.grid(True, linestyle="--", alpha=0.7)
-
     plt.style.use("dark_background")
 
     if path:
         plt.savefig(path, dpi=300, bbox_inches="tight")
-
-    plt.show()
+    if show:
+        plt.show()
 
 
 def plot_surface_3D(
     meshgrid: np.ndarray,
     cmap: str = "viridis",
     show: bool = True,
-    file_path: Optional[str] = None,
+    path: Optional[str] = None,
 ) -> None:
 
     fig = plt.figure(figsize=(10, 8))
@@ -67,7 +66,7 @@ def plot_surface_3D(
 
     ax.grid(False)
 
-    ax.plot_surface(np.split(meshgrid, 3), cmap=cmap, alpha=0.5)
+    ax.plot_surface(*meshgrid, cmap=cmap, alpha=0.5)
 
     ax.set_xlabel("x direction", color="gray")
     ax.set_ylabel("y direction", color="gray")
@@ -77,8 +76,8 @@ def plot_surface_3D(
     ax.tick_params(axis="y", colors="gray")
     ax.tick_params(axis="z", colors="gray")
 
-    if file_path is not None:
-        plt.savefig(file_path)
+    if path is not None:
+        plt.savefig(path)
     if show:
         plt.show()
     else:
@@ -87,30 +86,29 @@ def plot_surface_3D(
 
 def plot_contour(
     meshgrid: np.ndarray,
-    levels: int = 100,
     optim_path: Optional[np.ndarray] = None,
     variance: Optional[np.ndarray] = None,
+    levels: int = 100,
     cmap: str = "viridis",
     show: bool = True,
-    file_path: Optional[str] = None,
+    path: Optional[str] = None,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10, 8))
     fig.patch.set_facecolor("black")
     ax.set_facecolor("black")
 
-    contour = ax.contourf(
-        np.split(meshgrid, 3), cmap=cmap, levels=levels, antialiased=True
-    )
+    contour = ax.contourf(*meshgrid, cmap=cmap, levels=levels, antialiased=True)
     if optim_path is not None:
-        x, y = optim_path
+        x, y = optim_path.T
         ax.plot(x, y, marker=".", color="dodgerblue", linewidth=2, markersize=8)
 
-        var_1, var_2 = ""
-        if variance is not None:
-            print("Plot principle component variance")
-            var_1, var_2 = variance
-        ax.set_xlabel(f"principal component 1: {var_1}", color="white")
-        ax.set_ylabel(f"principal component 2: {var_2}", color="white")
+    if variance is not None:
+        var_1, var_2 = variance
+        ax.set_xlabel(f"principal component 1: {var_1:.3f}", color="white")
+        ax.set_ylabel(f"principal component 2: {var_2:.3f}", color="white")
+    else:
+        ax.set_xlabel("principal component 1", color="white")
+        ax.set_ylabel("principal component 2", color="white")
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -120,8 +118,8 @@ def plot_contour(
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
     plt.tight_layout()
 
-    if file_path is not None:
-        plt.savefig(file_path, facecolor="black", edgecolor="none")
+    if path is not None:
+        plt.savefig(path, facecolor="black", edgecolor="none")
     if show:
         plt.show()
     else:
@@ -132,25 +130,28 @@ def animate_contour(
     meshgrid: np.ndarray,
     optim_path: np.ndarray,
     variance: Optional[np.ndarray] = None,
-    levels: int = 100,
     fps: int = 5,
+    levels: int = 100,
     cmap: str = "viridis",
     show: bool = True,
-    file_path: Optional[str] = None,
+    path: Optional[str] = None,
 ) -> None:
 
     fig, ax = plt.subplots(figsize=(10, 8))
     fig.patch.set_facecolor("black")
     ax.set_facecolor("black")
-    contour = ax.contourf(
-        np.split(meshgrid, 3), cmap=cmap, levels=levels, antialiased=True
-    )
+    contour = ax.contourf(*meshgrid, cmap=cmap, levels=levels, antialiased=True)
 
     ax.set_xticks([])
     ax.set_yticks([])
-    assert variance is not None
-    ax.set_xlabel("principle component 1", color="white")
-    ax.set_ylabel("principle component 2", color="white")
+
+    if variance is not None:
+        var_1, var_2 = variance
+        ax.set_xlabel(f"principle component 1: {var_1:.3f}", color="white")
+        ax.set_ylabel(f"principle component 2: {var_2:.3f}", color="white")
+    else:
+        ax.set_xlabel("principle component 1", color="white")
+        ax.set_ylabel("principle component 2", color="white")
 
     cbar = plt.colorbar(contour, ax=ax)
     cbar.set_label("loss", color="white")
@@ -180,11 +181,10 @@ def animate_contour(
         interval=200,
         repeat=False,
     )
-
     plt.tight_layout()
 
     if show:
         plt.show()
-    if file_path is not None:
-        anim.save(file_path, writer="pillow", fps=fps)
+    if path is not None:
+        anim.save(path, writer="pillow", fps=fps)
     plt.close()

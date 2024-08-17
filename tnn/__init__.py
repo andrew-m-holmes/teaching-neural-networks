@@ -54,18 +54,12 @@ def get_landscape_from_file(path: str) -> Dict[str, np.ndarray]:
             )
         landscape["meshgrid"] = np.array(meshgrid)
 
-        directions = landscape_group.get("directions")
-        if directions is None:
-            raise RuntimeError(
-                f"could not locate meshgrid in {path}/landscape/directions"
-            )
-        landscape["directions"] = np.array(directions)
-
         optim_path = landscape_group.get("optim_path")
         if optim_path is not None:
             landscape["optim_path"] = np.array(optim_path)
+
         variance = landscape_group.get("variance")
-        if optim_path is not None:
+        if variance is not None:
             landscape["variance"] = np.array(variance)
 
         return landscape
