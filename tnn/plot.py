@@ -1,9 +1,8 @@
-import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
 from matplotlib.animation import FuncAnimation
-from typing import Dict, Optional, Tuple, List, Any
+from typing import Dict, Optional, List
 
 plt.style.use("dark_background")
 
@@ -54,7 +53,7 @@ def plot_metrics(
 
 
 def plot_surface_3D(
-    meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    meshgrid: np.ndarray,
     cmap: str = "viridis",
     show: bool = True,
     file_path: Optional[str] = None,
@@ -68,7 +67,7 @@ def plot_surface_3D(
 
     ax.grid(False)
 
-    ax.plot_surface(meshgrid, cmap=cmap, alpha=0.5)
+    ax.plot_surface(np.split(meshgrid, 3), cmap=cmap, alpha=0.5)
 
     ax.set_xlabel("x direction", color="gray")
     ax.set_ylabel("y direction", color="gray")
@@ -87,7 +86,7 @@ def plot_surface_3D(
 
 
 def plot_contour(
-    meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    meshgrid: np.ndarray,
     levels: int = 100,
     optim_path: Optional[np.ndarray] = None,
     variance: Optional[np.ndarray] = None,
@@ -99,7 +98,9 @@ def plot_contour(
     fig.patch.set_facecolor("black")
     ax.set_facecolor("black")
 
-    contour = ax.contourf(*meshgrid, cmap=cmap, levels=levels, antialiased=True)
+    contour = ax.contourf(
+        np.split(meshgrid, 3), cmap=cmap, levels=levels, antialiased=True
+    )
     if optim_path is not None:
         x, y = optim_path
         ax.plot(x, y, marker=".", color="dodgerblue", linewidth=2, markersize=8)
@@ -128,7 +129,7 @@ def plot_contour(
 
 
 def animate_contour(
-    meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    meshgrid: np.ndarray,
     optim_path: np.ndarray,
     variance: Optional[np.ndarray] = None,
     levels: int = 100,
@@ -141,15 +142,18 @@ def animate_contour(
     fig, ax = plt.subplots(figsize=(10, 8))
     fig.patch.set_facecolor("black")
     ax.set_facecolor("black")
-    contour = ax.contourf(*meshgrid, cmap=cmap, levels=levels, antialiased=True)
+    contour = ax.contourf(
+        np.split(meshgrid, 3), cmap=cmap, levels=levels, antialiased=True
+    )
 
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_xlabel("Principal Component 1", color="white")
-    ax.set_ylabel("Principal Component 2", color="white")
+    assert variance is not None
+    ax.set_xlabel("principle component 1", color="white")
+    ax.set_ylabel("principle component 2", color="white")
 
     cbar = plt.colorbar(contour, ax=ax)
-    cbar.set_label("Loss", color="white")
+    cbar.set_label("loss", color="white")
     cbar.ax.yaxis.set_tick_params(color="white")
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
 
@@ -165,7 +169,7 @@ def animate_contour(
         pcy.append(pc[1])
         pathline.set_data(pcx, pcy)
         point.set_data([pcx[-1]], [pcy[-1]])
-        text.set_text(f"Iteration: {frame + 1}")
+        text.set_text(f"iteration: {frame + 1}")
         return pathline, point, text
 
     anim = FuncAnimation(
