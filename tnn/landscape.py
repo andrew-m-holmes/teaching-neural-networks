@@ -148,9 +148,9 @@ class Landscape:
         }
 
     def _compute_random_directions(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
-        directions_x, directions_y = [], []
+        x_directions, y_directions = [], []
         for weight in self.model.parameters():
-            w_norm = weight.flatten().norm().numpy()
+            w_norm = weight.detach().flatten().norm().numpy()
 
             x = np.random.randn(weight.numel())
             x *= w_norm / np.linalg.norm(x)
@@ -158,13 +158,13 @@ class Landscape:
             y = np.random.randn(weight.numel())
             y *= w_norm / np.linalg.norm(y)
 
-            directions_x.append(x)
-            directions_y.append(y)
+            x_directions.append(x)
+            y_directions.append(y)
 
         return {
             "directions": (
-                np.concat(directions_x, axis=0),
-                np.concat(directions_y, axis=0),
+                np.concat(x_directions, axis=0),
+                np.concat(y_directions, axis=0),
             )
         }
 
@@ -209,7 +209,7 @@ class Landscape:
                             f"y_direction saved to {self.path}/landscape/metadata/y_direction"
                         )
 
-                else:
+                elif data is not None:
                     metadata_group.create_dataset(
                         name=name, data=data, dtype=np.float32
                     )

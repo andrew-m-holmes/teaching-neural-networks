@@ -1,17 +1,20 @@
-import pickle
+import h5py
+import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, Optional, Sequence, List
+
+from matplotlib.animation import FuncAnimation
+from typing import Dict, Optional, Tuple, List, Any
 
 plt.style.use("dark_background")
 
 
 def plot_metrics(
-    metrics: Dict[str, Sequence[float]],
+    metrics: Dict[str, np.ndarray],
     colors: Optional[List[str]] = None,
     path: Optional[str] = None,
     title: Optional[str] = None,
-    xlabel: str = "Epoch",
-    ylabel: str = "Value",
+    xlabel: str = "epoch",
+    ylabel: str = "loss",
     figsize: tuple = (12, 8),
 ) -> None:
     plt.figure(figsize=figsize)
@@ -51,7 +54,10 @@ def plot_metrics(
 
 
 def plot_surface_3D(
-    mesh, cmap: str = "viridis", show: bool = True, file_path: Optional[str] = None
+    meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    cmap: str = "viridis",
+    show: bool = True,
+    file_path: Optional[str] = None,
 ) -> None:
 
     fig = plt.figure(figsize=(10, 8))
@@ -62,11 +68,11 @@ def plot_surface_3D(
 
     ax.grid(False)
 
-    ax.plot_surface(mesh, cmap=cmap, alpha=0.5)
+    ax.plot_surface(meshgrid, cmap=cmap, alpha=0.5)
 
-    ax.set_xlabel("Principle Component 1", color="gray")
-    ax.set_ylabel("Principle Component 2", color="gray")
-    ax.set_zlabel("Loss", color="gray")
+    ax.set_xlabel("x direction", color="gray")
+    ax.set_ylabel("y direction", color="gray")
+    ax.set_zlabel("loss", color="gray")
 
     ax.tick_params(axis="x", colors="gray")
     ax.tick_params(axis="y", colors="gray")
@@ -81,9 +87,10 @@ def plot_surface_3D(
 
 
 def plot_contour(
-    self,
+    meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
     levels: int = 100,
-    plot_trajectory: bool = False,
+    optim_path: Optional[np.ndarray] = None,
+    variance: Optional[np.ndarray] = None,
     cmap: str = "viridis",
     show: bool = True,
     file_path: Optional[str] = None,
@@ -92,18 +99,22 @@ def plot_contour(
     fig.patch.set_facecolor("black")
     ax.set_facecolor("black")
 
-    contour = ax.contourf(*self.mesh, cmap=cmap, levels=levels, antialiased=True)
-    if plot_trajectory:
-        assert self.trajectory is not None
-        x, y = self.trajectory
+    contour = ax.contourf(*meshgrid, cmap=cmap, levels=levels, antialiased=True)
+    if optim_path is not None:
+        x, y = optim_path
         ax.plot(x, y, marker=".", color="dodgerblue", linewidth=2, markersize=8)
+
+        var_1, var_2 = ""
+        if variance is not None:
+            print("Plot principle component variance")
+            var_1, var_2 = variance
+        ax.set_xlabel(f"principal component 1: {var_1}", color="white")
+        ax.set_ylabel(f"principal component 2: {var_2}", color="white")
 
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_xlabel("Principal Component 1", color="white")
-    ax.set_ylabel("Principal Component 2", color="white")
     cbar = plt.colorbar(contour, ax=ax)
-    cbar.set_label("Loss", color="white")
+    cbar.set_label("loss", color="white")
     cbar.ax.yaxis.set_tick_params(color="white")
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
     plt.tight_layout()
@@ -117,7 +128,9 @@ def plot_contour(
 
 
 def animate_contour(
-    self,
+    meshgrid: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    optim_path: np.ndarray,
+    variance: Optional[np.ndarray] = None,
     levels: int = 100,
     fps: int = 5,
     cmap: str = "viridis",
@@ -128,7 +141,7 @@ def animate_contour(
     fig, ax = plt.subplots(figsize=(10, 8))
     fig.patch.set_facecolor("black")
     ax.set_facecolor("black")
-    contour = ax.contourf(*self.mesh, cmap=cmap, levels=levels, antialiased=True)
+    contour = ax.contourf(*meshgrid, cmap=cmap, levels=levels, antialiased=True)
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -140,16 +153,14 @@ def animate_contour(
     cbar.ax.yaxis.set_tick_params(color="white")
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color="white")
 
-    assert self.trajectory is not None
-    trajectory = self.trajectory.T
-    pc_0 = trajectory[0]
+    pc_0 = optim_path[0]
     pcx, pcy = [pc_0[0]], [pc_0[1]]
     (pathline,) = ax.plot(pcx, pcy, color="dodgerblue", lw=2)
     (point,) = ax.plot(pcx, pcy, "o", color="dodgerblue", markersize=8)
     text = ax.text(0.02, 0.95, "", transform=ax.transAxes, color="white")
 
     def update(frame):
-        pc = trajectory[frame]
+        pc = optim_path[frame]
         pcx.append(pc[0])
         pcy.append(pc[1])
         pathline.set_data(pcx, pcy)
@@ -160,7 +171,7 @@ def animate_contour(
     anim = FuncAnimation(
         fig,
         update,
-        frames=len(trajectory),
+        frames=len(optim_path),
         blit=True,
         interval=200,
         repeat=False,
@@ -173,9 +184,3 @@ def animate_contour(
     if file_path is not None:
         anim.save(file_path, writer="pillow", fps=fps)
     plt.close()
-
-
-def load_metrics(file_path):
-    with open(file_path, "rb") as file:
-        train_loss, val_loss = pickle.load(file)
-    return train_loss, val_loss
