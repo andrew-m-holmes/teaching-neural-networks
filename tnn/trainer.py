@@ -94,13 +94,16 @@ class Trainer:
             metrics["train_accs"].append(epoch_train_acc)
             metrics["test_accs"].append(epoch_test_acc)
 
-            if self.verbose and (
-                (epoch + 1) % self.verbose == 0 or (epoch + 1) == self.verbose
-            ):
+            print_info = bool(
+                self.verbose
+                and ((epoch + 1) % self.verbose == 0 or (epoch + 1) == self.verbose)
+            )
+
+            if print_info:
                 self._epoch_print(epoch + 1, metrics)
 
             if self.path is not None:
-                self._write_trajectory(epoch + 1, verbose=bool(self.verbose))
+                self._write_trajectory(epoch + 1, verbose=print_info)
 
         if self.verbose:
             print("training complete")

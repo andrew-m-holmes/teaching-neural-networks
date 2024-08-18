@@ -220,6 +220,7 @@ class Landscape:
 
             trajectory = weight_states[:-1]
             final_weights = trajectory[-1]
+            print(trajectory.shape, final_weights.shape)
             model.load_flat_weights(final_weights)
             return cls(
                 model,
