@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -20,18 +21,7 @@ def plot_metrics(
     plt.figure(figsize=figsize)
 
     if colors is None:
-        colors = [
-            "dodgerblue",
-            "red",
-            "aquamarine",
-            "violet",
-            "purple",
-            "brown",
-            "pink",
-            "gray",
-            "olive",
-            "cyan",
-        ]
+        colors = ["dodgerblue", "red", "blueviolet", "aquamarine", "coral", "purple"]
 
     for (metric_name, values), color in zip(metrics.items(), colors):
         epochs = range(1, len(values) + 1)
@@ -45,7 +35,9 @@ def plot_metrics(
     plt.legend(loc="best")
     plt.style.use("dark_background")
 
-    if path:
+    if path is not None:
+        dirname = os.path.dirname(path)
+        os.makedirs(dirname, exist_ok=True)
         plt.savefig(path, dpi=300, bbox_inches="tight")
     if show:
         plt.show()
@@ -77,6 +69,8 @@ def plot_surface_3D(
     ax.tick_params(axis="z", colors="gray")
 
     if path is not None:
+        dirname = os.path.dirname(path)
+        os.makedirs(dirname, exist_ok=True)
         plt.savefig(path)
     if show:
         plt.show()
@@ -119,6 +113,8 @@ def plot_contour(
     plt.tight_layout()
 
     if path is not None:
+        dirname = os.path.dirname(path)
+        os.makedirs(dirname, exist_ok=True)
         plt.savefig(path, facecolor="black", edgecolor="none")
     if show:
         plt.show()
@@ -186,5 +182,7 @@ def animate_contour(
     if show:
         plt.show()
     if path is not None:
+        dirname = os.path.dirname(path)
+        os.makedirs(dirname, exist_ok=True)
         anim.save(path, writer="pillow", fps=fps)
     plt.close()

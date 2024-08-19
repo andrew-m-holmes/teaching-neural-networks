@@ -18,6 +18,7 @@ class Trainer:
         loss_fn: Callable[..., torch.Tensor],
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
+        save_weights: bool = True,
         device: Optional[str] = None,
         path: Optional[str] = None,
         verbose: Optional[Union[bool, int]] = None,
@@ -39,6 +40,7 @@ class Trainer:
         self.loss_fn = loss_fn
         self.dataloader = dataloader
         self.eval_dataloader = eval_dataloader
+        self.save_weights = save_weights
         self.device = device
         self.path = path
         self.verbose = verbose
@@ -61,7 +63,7 @@ class Trainer:
             "test_accs": [],
         }
 
-        if self.path is not None:
+        if self.path is not None and self.save_weights:
             self._write_trajectory(epoch=0, verbose=bool(self.verbose))
 
         if self.verbose:
@@ -102,7 +104,7 @@ class Trainer:
             if print_info:
                 self._epoch_print(epoch + 1, metrics)
 
-            if self.path is not None:
+            if self.path is not None and self.save_weights:
                 self._write_trajectory(epoch + 1, verbose=print_info)
 
         if self.verbose:
