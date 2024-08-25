@@ -201,6 +201,8 @@ def animate_function_descent_3d(
     def update():
         pass
 
+    anim = FuncAnimation
+
     if show:
         pass
     if path is not None:
