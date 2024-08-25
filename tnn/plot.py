@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from matplotlib.animation import FuncAnimation
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Callable
 
 plt.style.use("dark_background")
 
@@ -186,3 +186,23 @@ def animate_contour(
         os.makedirs(dirname, exist_ok=True)
         anim.save(path, writer="pillow", fps=fps)
     plt.close()
+
+
+def animate_function_descent_3d(
+    func: Callable[..., float],
+    dfunc: Callable[..., Tuple[float, float]],
+    init: Optional[Tuple[float, float]] = None,
+    fps: int = 5,
+    cmap: str = "viridis",
+    show: bool = True,
+    path: Optional[str] = None,
+) -> None:
+
+    def update():
+        pass
+
+    if show:
+        pass
+    if path is not None:
+        dirname = os.path.dirname(path)
+        os.makedirs(dirname, exist_ok=True)
