@@ -198,10 +198,12 @@ def animate_function_descent_3d(
     path: Optional[str] = None,
 ) -> None:
 
+    fig, ax = plt.subplots(figsize=(10, 8))
+
     def update():
         pass
 
-    anim = FuncAnimation
+    anim = FuncAnimation()
 
     if show:
         pass
