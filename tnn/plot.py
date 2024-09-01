@@ -41,11 +41,11 @@ def plot_metrics(
             linestyle=linestyle,
         )
 
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+    plt.xlabel(xlabel, fontsize=12)
+    plt.ylabel(ylabel, fontsize=12)
     if title:
         plt.title(title)
-    plt.legend(loc="best")
+    plt.legend(loc="best", fontsize=14)
     plt.style.use("dark_background")
 
     if path is not None:
