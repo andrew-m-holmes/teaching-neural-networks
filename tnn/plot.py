@@ -10,6 +10,8 @@ plt.style.use("dark_background")
 
 def plot_metrics(
     metrics: Dict[str, np.ndarray],
+    best_linestyle: str = "-",
+    use_min: bool = True,
     colors: Optional[List[str]] = None,
     title: Optional[str] = None,
     xlabel: str = "epoch",
@@ -23,10 +25,21 @@ def plot_metrics(
     if colors is None:
         colors = ["dodgerblue", "red", "blueviolet", "aquamarine", "coral", "purple"]
 
+    default_linestyle = "-"
+    func = min if use_min else max
+    best_metric = func(metrics, key=lambda item: item[1][-1])
+
     for (metric_name, values), color in zip(metrics.items(), colors):
+        linestyle = best_linestyle if metric_name == best_metric else default_linestyle
         epochs = range(1, len(values) + 1)
         final_value = values[-1]
-        plt.plot(epochs, values, label=f"{metric_name}: {final_value:.4f}", color=color)
+        plt.plot(
+            epochs,
+            values,
+            label=f"{metric_name}: {final_value:.4f}",
+            color=color,
+            linestyle=linestyle,
+        )
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -203,7 +216,10 @@ def animate_function_descent_3d(
     def update():
         pass
 
-    anim = FuncAnimation()
+    anim = FuncAnimation(
+        fig=fig,
+        func=update,
+    )
 
     if show:
         pass
