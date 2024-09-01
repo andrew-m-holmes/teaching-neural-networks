@@ -43,6 +43,7 @@ def plot_metrics(
 
     plt.xlabel(xlabel, fontsize=12)
     plt.ylabel(ylabel, fontsize=12)
+
     if title:
         plt.title(title)
     plt.legend(loc="best", fontsize=14)
