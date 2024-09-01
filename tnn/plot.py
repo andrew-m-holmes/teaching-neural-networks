@@ -271,7 +271,7 @@ def animate_function_descent_3d(
         fig=fig, func=update, frames=iters, interval=200, blit=True, repeat=repeat
     )
 
-    if show:
+    if show and path is None:
         plt.show()
     if path is not None:
         dirname = os.path.dirname(path)
