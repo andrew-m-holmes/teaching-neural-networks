@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from matplotlib.animation import FuncAnimation
-from typing import Dict, Optional, List, Tuple, Callable
+from typing import Dict, Optional, List, Tuple, Callable, Union
 
 plt.style.use("dark_background")
 
@@ -205,25 +205,75 @@ def animate_contour(
 def animate_function_descent_3d(
     func: Callable[..., float],
     dfunc: Callable[..., Tuple[float, float]],
+    endpoints: Tuple[float, float],
+    n_features: int,
+    slack: float = 0.5,
     init: Optional[Tuple[float, float]] = None,
+    lr: float = 1e-2,
+    grad: float = 1.0,
+    iters: int = 100,
+    repeat: bool = False,
     fps: int = 5,
     cmap: str = "viridis",
     show: bool = True,
     path: Optional[str] = None,
+    verbose: Optional[Union[int, bool]] = None,
 ) -> None:
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    if not verbose or verbose < 0:
+        verbose = False
+    else:
+        verbose = int(verbose)
 
-    def update():
-        pass
+    n_points = 100
+    x_coords = np.linspace(*endpoints, num=n_points)
+    y_coords = np.linspace(*endpoints, num=n_points)
+    X, Y = np.meshgrid(x_coords, y_coords)
+    Z = np.zeros((n_points, n_points))
+
+    x = np.random.randn(n_features)
+    for i in range(n_points):
+        for j in range(n_points):
+            w1, w2 = X[i, j], Y[i, j]
+            loss = func(x, w1, w2)
+            Z[i, j] = loss
+
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection="3d")
+    param_range = (min(endpoints) + slack, max(endpoints))
+    loss_range = (0, Z.max() + slack)
+
+    plt.xlabel("w1")
+    plt.ylabel("w2")
+    ax.set_zlabel("loss")
+    ax.set_xlim(param_range)
+    ax.set_ylim(param_range)
+    ax.set_zlim(loss_range)
+
+    ax.plot_surface(X, Y, Z, cmap=cmap, alpha=0.5)
+    scatter = ax.scatter([], [], [], color="red", s=25, depthshade=False)
+    w1, w2 = (
+        init if init is not None else np.random.choice(x_coords, size=2, replace=True)
+    )
+
+    def update(frame):
+        nonlocal w1, w2
+        loss = func(x, w1, w2)
+        scatter._offsets3d = ([w1], [w2], [loss])
+        dw1, dw2 = dfunc(x, w1, w2, grad)
+        w1 -= lr * dw1
+        w2 -= lr * dw2
+        if ((frame + 1) % verbose == 0 and frame) or (frame + 1) == verbose:
+            print(f"frame: {frame + 1}, loss: {loss:.3f}, w1: {w1:.3f}, w2: {w2:.3f}")
+        return (scatter,)
 
     anim = FuncAnimation(
-        fig=fig,
-        func=update,
+        fig=fig, func=update, frames=iters, interval=200, blit=True, repeat=repeat
     )
 
     if show:
-        pass
+        plt.show()
     if path is not None:
         dirname = os.path.dirname(path)
         os.makedirs(dirname, exist_ok=True)
+        anim.save(f"{path}", writer="pillow", fps=fps)
