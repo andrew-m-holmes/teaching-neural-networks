@@ -206,7 +206,6 @@ def animate_function_descent_3d(
     func: Callable[..., float],
     dfunc: Callable[..., Tuple[float, float]],
     endpoints: Tuple[float, float],
-    n_features: int,
     slack: float = 0.5,
     init: Optional[Tuple[float, float]] = None,
     lr: float = 1e-2,
@@ -231,11 +230,10 @@ def animate_function_descent_3d(
     X, Y = np.meshgrid(x_coords, y_coords)
     Z = np.zeros((n_points, n_points))
 
-    x = np.random.randn(n_features)
     for i in range(n_points):
         for j in range(n_points):
             w1, w2 = X[i, j], Y[i, j]
-            loss = func(x, w1, w2)
+            loss = func(w1, w2)
             Z[i, j] = loss
 
     fig = plt.figure(figsize=(10, 8))
@@ -258,11 +256,11 @@ def animate_function_descent_3d(
 
     def update(frame):
         nonlocal w1, w2
-        loss = func(x, w1, w2)
+        loss = func(w1, w2)
         scatter._offsets3d = ([w1], [w2], [loss])
-        dw1, dw2 = dfunc(x, w1, w2, grad)
-        w1 -= lr * dw1
-        w2 -= lr * dw2
+        dw1, dw2 = dfunc(w1, w2)
+        w1 -= lr * dw1 * grad
+        w2 -= lr * dw2 * grad
         if ((frame + 1) % verbose == 0 and frame) or (frame + 1) == verbose:
             print(f"frame: {frame + 1}, loss: {loss:.3f}, w1: {w1:.3f}, w2: {w2:.3f}")
         return (scatter,)

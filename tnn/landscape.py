@@ -95,8 +95,9 @@ class Landscape:
         meshgrid = np.stack((X, Y, Z), axis=0)
 
         if self.path is not None:
-            dirname = os.path.dirname(__file__)
+            dirname = os.path.dirname(self.path)
             os.makedirs(dirname, exist_ok=True)
+            print(dirname)
             self._write_landscape(
                 meshgrid,
                 optim_path=data.get("optim_path"),
@@ -220,7 +221,6 @@ class Landscape:
 
             trajectory = weight_states[:-1]
             final_weights = trajectory[-1]
-            print(trajectory.shape, final_weights.shape)
             model.load_flat_weights(final_weights)
             return cls(
                 model,
