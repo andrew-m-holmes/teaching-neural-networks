@@ -7,7 +7,7 @@ import numpy as np
 
 from .model import Model
 from sklearn.decomposition import PCA
-from typing import Callable, Tuple, Optional, Dict, Union, Iterator
+from typing import Callable, Optional, Dict, Union, Iterator
 
 
 class Landscape:
@@ -43,8 +43,10 @@ class Landscape:
 
     def create_meshgrid(
         self,
-        resolution: int = 25,
-        endpoints: Tuple[float, float] = (-10.0, 10.0),
+        start: float = -1.0,
+        stop: float = 1.0,
+        step: int = 10,
+        use_logspace: bool = False,
         mode: str = "pca",
         pca_matrix_indices: Optional[Iterator] = None,
     ) -> Dict[str, Optional[np.ndarray]]:
@@ -61,10 +63,15 @@ class Landscape:
         else:
             data = self._compute_random_directions()
 
-        x_coordinates = np.linspace(*endpoints, num=resolution)
-        y_coordinates = np.linspace(*endpoints, num=resolution)
-        X, Y = np.meshgrid(x_coordinates, y_coordinates, indexing="ij")
-        Z = np.zeros((resolution, resolution))
+        if use_logspace:
+            logspace = np.logspace(start, stop, num=step)
+            coordinates = np.concat((np.negative(logspace)[::-1], [0], logspace))
+        else:
+            coordinates = np.linspace(start, stop, num=step)
+
+        points = coordinates.size
+        X, Y = np.meshgrid(coordinates, coordinates, indexing="ij")
+        Z = np.zeros((points, points))
 
         directions = data.get("directions")
         assert directions is not None
@@ -73,8 +80,8 @@ class Landscape:
 
         if self.verbose:
             print(f"meshgrid creation started")
-        for i in range(resolution):
-            for j in range(resolution):
+        for i in range(points):
+            for j in range(points):
 
                 perturbed_weights = (
                     trained_weights + X[i][j] * x_direction + Y[i][j] * y_direction
@@ -84,7 +91,7 @@ class Landscape:
                 Z[i][j] = loss
 
                 if self.verbose:
-                    n_iter = i * resolution + j + 1
+                    n_iter = i * points + j + 1
                     if (n_iter % self.verbose == 0 and n_iter > 1) or (
                         n_iter == self.verbose
                     ):

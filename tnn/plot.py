@@ -180,7 +180,7 @@ def animate_contour(
         pcy.append(pc[1])
         pathline.set_data(pcx, pcy)
         point.set_data([pcx[-1]], [pcy[-1]])
-        text.set_text(f"iteration: {frame + 1}")
+        text.set_text(f"epoch: {frame + 1}")
         return pathline, point, text
 
     anim = FuncAnimation(
@@ -205,7 +205,10 @@ def animate_contour(
 def animate_function_descent_3d(
     func: Callable[..., float],
     dfunc: Callable[..., Tuple[float, float]],
-    endpoints: Tuple[float, float],
+    start: float,
+    stop: float,
+    step: int,
+    use_logspace: bool = False,
     slack: float = 0.5,
     init: Optional[Tuple[float, float]] = None,
     lr: float = 1e-2,
@@ -224,21 +227,25 @@ def animate_function_descent_3d(
     else:
         verbose = int(verbose)
 
-    n_points = 100
-    x_coords = np.linspace(*endpoints, num=n_points)
-    y_coords = np.linspace(*endpoints, num=n_points)
-    X, Y = np.meshgrid(x_coords, y_coords)
-    Z = np.zeros((n_points, n_points))
+    if use_logspace:
+        logspace = np.logspace(start, stop, num=step)
+        coords = np.concat((np.negative(logspace)[::-1], [0], logspace))
+    else:
+        coords = np.linspace(start, stop, num=step)
 
-    for i in range(n_points):
-        for j in range(n_points):
+    points = coords.size
+    X, Y = np.meshgrid(coords, coords)
+    Z = np.zeros((points, points))
+
+    for i in range(points):
+        for j in range(points):
             w1, w2 = X[i, j], Y[i, j]
             loss = func(w1, w2)
             Z[i, j] = loss
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
-    param_range = (min(endpoints) + slack, max(endpoints))
+    param_range = (min(coords) + slack, max(coords))
     loss_range = (0, Z.max() + slack)
 
     plt.xlabel("w1")
@@ -251,7 +258,7 @@ def animate_function_descent_3d(
     ax.plot_surface(X, Y, Z, cmap=cmap, alpha=0.5)
     scatter = ax.scatter([], [], [], color="red", s=25, depthshade=False)
     w1, w2 = (
-        init if init is not None else np.random.choice(x_coords, size=2, replace=True)
+        init if init is not None else np.random.choice(coords, size=2, replace=True)
     )
 
     def update(frame):

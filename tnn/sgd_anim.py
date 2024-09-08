@@ -28,7 +28,6 @@ def df(x: float, y: float) -> Tuple[float, float]:
 
 def main():
 
-    endpoints = (-2, 2)
     init = (-1.5, 0.9)
     lr = 5e-1
     iters = 40
@@ -36,7 +35,9 @@ def main():
     tnn.animate_function_descent_3d(
         f,
         df,
-        endpoints,
+        start=-2,
+        stop=2,
+        step=100,
         slack=0.1,
         init=init,
         lr=lr,
@@ -50,7 +51,9 @@ def main():
     tnn.animate_function_descent_3d(
         f,
         df,
-        endpoints,
+        start=-2,
+        stop=2,
+        step=100,
         slack=0.1,
         init=init,
         lr=lr,
