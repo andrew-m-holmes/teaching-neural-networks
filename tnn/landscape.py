@@ -7,7 +7,7 @@ import numpy as np
 
 from .model import Model
 from sklearn.decomposition import PCA
-from typing import Callable, Tuple, Optional, Dict, Union
+from typing import Callable, Tuple, Optional, Dict, Union, Iterator
 
 
 class Landscape:
@@ -46,6 +46,7 @@ class Landscape:
         resolution: int = 25,
         endpoints: Tuple[float, float] = (-10.0, 10.0),
         mode: str = "pca",
+        pca_matrix_indices: Optional[Iterator] = None,
     ) -> Dict[str, Optional[np.ndarray]]:
         mode = mode.lower().strip()
         if mode not in ("pca", "random"):
@@ -56,7 +57,7 @@ class Landscape:
         if self.verbose:
             print(f"meshgrid creation using {mode}\nmodel using {self.device}")
         if mode == "pca":
-            data = self._compute_pca_directions()
+            data = self._compute_pca_directions(matrix_indices=pca_matrix_indices)
         else:
             data = self._compute_random_directions()
 
@@ -130,8 +131,12 @@ class Landscape:
             self.model.cpu()
             return net_loss / n_batches
 
-    def _compute_pca_directions(self) -> Dict[str, np.ndarray]:
+    def _compute_pca_directions(
+        self, matrix_indices: Optional[Iterator] = None
+    ) -> Dict[str, np.ndarray]:
         train_variance_matrix = self.trajectory - self.model.get_flat_weights()
+        if matrix_indices is not None:
+            train_variance_matrix = train_variance_matrix[matrix_indices]
         pca = PCA(n_components=2)
 
         optim_path = pca.fit_transform(train_variance_matrix)
@@ -146,7 +151,7 @@ class Landscape:
     def _compute_random_directions(self) -> Dict[str, np.ndarray]:
         x_directions, y_directions = [], []
         for weight in self.model.parameters():
-            w_norm = weight.detach().flatten().norm().numpy()
+            w_norm = weight.cpu().detach().flatten().norm().numpy()
 
             x = np.random.randn(weight.numel())
             x *= w_norm / np.linalg.norm(x)

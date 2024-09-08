@@ -18,6 +18,7 @@ class Trainer:
         loss_fn: Callable[..., torch.Tensor],
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
+        epochs: int = 100,
         save_weights: bool = True,
         device: Optional[str] = None,
         path: Optional[str] = None,
@@ -40,12 +41,13 @@ class Trainer:
         self.loss_fn = loss_fn
         self.dataloader = dataloader
         self.eval_dataloader = eval_dataloader
+        self.epochs = epochs
         self.save_weights = save_weights
         self.device = device
         self.path = path
         self.verbose = verbose
 
-    def train(self, epochs: int = 1) -> Dict[str, List[float]]:
+    def train(self) -> Dict[str, List[float]]:
         if self.path is not None:
             dirname = os.path.dirname(self.path)
             os.makedirs(dirname, exist_ok=True)
@@ -68,7 +70,7 @@ class Trainer:
 
         if self.verbose:
             print("training started")
-        for epoch in range(epochs):
+        for epoch in range(self.epochs):
             epoch_train_loss, epoch_train_acc = 0, 0
 
             self.model.train()
@@ -144,7 +146,7 @@ class Trainer:
 
     def _epoch_print(self, epoch: int, metrics: Dict[str, List[float]]) -> None:
         print(
-            f"(epoch: {epoch}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_accs'][-1]:.4f}, test acc: {metrics['test_accs'][-1]:.4f})"
+            f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_accs'][-1]:.4f}, test acc: {metrics['test_accs'][-1]:.4f})"
         )
 
     def _write_trajectory(self, epoch: int, verbose: bool = False) -> None:
