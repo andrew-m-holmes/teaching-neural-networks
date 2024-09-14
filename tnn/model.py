@@ -4,26 +4,22 @@ import torch.nn.functional as f
 import numpy as np
 
 from typing import Any, Dict
+from transformers import BertModel
 
 
 class Model(nn.Module):
 
-    def __init__(self, model: nn.Module) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.model = model
 
-    def forward(self, inputs: Any) -> Dict[str, Any]:
-        return (
-            self.model(inputs)
-            if isinstance(inputs, torch.Tensor)
-            else self.model(**inputs)
-        )
+    def forward(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        raise NotImplementedError
 
     def get_flat_weights(self) -> np.ndarray:
         return torch.cat(
             [
                 p.cpu().detach().clone().flatten()
-                for p in self.model.parameters()
+                for p in self.parameters()
                 if p.requires_grad
             ],
             dim=0,
@@ -31,9 +27,7 @@ class Model(nn.Module):
 
     def load_flat_weights(self, weights: np.ndarray) -> None:
         i = 0
-        for parameter in filter(
-            lambda p: p.requires_grad == True, self.model.parameters()
-        ):
+        for parameter in filter(lambda p: p.requires_grad == True, self.parameters()):
             shape = parameter.shape
             j = i + parameter.numel()
             new_parameter = torch.from_numpy(weights[i:j].reshape(shape)).float()
@@ -41,9 +35,9 @@ class Model(nn.Module):
             i = j
 
 
-class MLP(nn.Module):
+class MLP(Model):
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.linear_1 = nn.Linear(28 * 28, 512)
         self.norm_1 = nn.LayerNorm(512)
@@ -55,7 +49,7 @@ class MLP(nn.Module):
         self.norm_3 = nn.LayerNorm(512)
         self.linear_4 = nn.Linear(512, 10)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
         x = self.norm_1(self.linear_1(x))
         x = self.drop_1(f.relu(x))
 
@@ -65,3 +59,21 @@ class MLP(nn.Module):
         x = self.norm_3(self.linear_3(x))
         x = self.linear_4(f.relu(x))
         return {"logits": x}
+
+
+class BertForClassification(Model):
+
+    def __init__(
+        self,
+        classes: int,
+        hidden_size: int,
+        name: str = "google-bert/bert-base-uncased",
+    ) -> None:
+        super().__init__()
+        self.bert = BertModel.from_pretrained(name)
+        self.linear = nn.Linear(hidden_size, classes)
+
+    def forward(self, **kwargs) -> Dict[str, Any]:
+        cls_hidden_state = self.bert(**kwargs).pooler_output
+        logits = self.linear(cls_hidden_state)
+        return {"logits": logits}

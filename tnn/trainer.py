@@ -6,7 +6,7 @@ import torch.utils.data as data
 import numpy as np
 
 from .model import Model
-from typing import Union, List, Callable, Optional, Dict
+from typing import Union, List, Callable, Optional, Dict, Tuple, Any
 
 
 class Trainer:
@@ -19,10 +19,13 @@ class Trainer:
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
         epochs: int = 100,
+        unpack_inputs: bool = False,
         save_weights: bool = True,
         device: Optional[str] = None,
+        to_method: Optional[Callable[..., Tuple[Any, Any]]] = None,
         path: Optional[str] = None,
         verbose: Optional[Union[bool, int]] = None,
+        profile: bool = False,
     ) -> None:
 
         if device is None:
@@ -31,6 +34,13 @@ class Trainer:
                 if torch.cuda.is_available()
                 else "mps" if torch.backends.mps.is_available() else "cpu"
             )
+
+        if to_method is None:
+            to_method = lambda inputs, labels: (
+                inputs.to(device=device, non_blocking=True),
+                labels.to(device=device, non_blocking=True),
+            )
+
         if not verbose or verbose < 0:
             verbose = False
         else:
@@ -42,10 +52,13 @@ class Trainer:
         self.dataloader = dataloader
         self.eval_dataloader = eval_dataloader
         self.epochs = epochs
+        self.unpack_inputs = unpack_inputs
         self.save_weights = save_weights
         self.device = device
+        self.to_method = to_method
         self.path = path
         self.verbose = verbose
+        self.profile = profile
 
     def train(self) -> Dict[str, List[float]]:
         if self.path is not None:
@@ -57,41 +70,56 @@ class Trainer:
             print(f"model using {self.device}")
 
         n_batches = len(self.dataloader)
-        n_samples = sum(batch[1].size(0) for batch in self.dataloader)
         metrics = {
             "train_losses": [],
             "test_losses": [],
             "train_accs": [],
             "test_accs": [],
         }
+        epoch_allocated, epoch_reserved = None, None
 
         if self.path is not None and self.save_weights:
             self._write_trajectory(epoch=0, verbose=bool(self.verbose))
 
         if self.verbose:
             print("training started")
+
         for epoch in range(self.epochs):
-            epoch_train_loss, epoch_train_acc = 0, 0
+            epoch_train_loss, epoch_train_acc, n_samples = 0, 0, 0
+
+            if self.profile is not None:
+                epoch_allocated, epoch_reserved = 0, 0
 
             self.model.train()
             for inputs, labels in self.dataloader:
-                inputs = inputs.to(self.device, non_blocking=True)
-                labels = labels.to(self.device, non_blocking=True)
+                inputs, labels = self.to_method(inputs, labels)
 
                 self.optim.zero_grad()
-                logits = self.model(inputs).get("logits")
+                logits = (
+                    self.model(**inputs).get("logits")
+                    if self.unpack_inputs
+                    else self.model(inputs).get("logits")
+                )
                 loss = self.loss_fn(logits, labels)
                 loss.backward()
                 self.optim.step()
 
                 epoch_train_loss += loss.item()
                 epoch_train_acc += self._compute_correct(logits, labels)
+                n_samples += labels.size(0)
+
+                if epoch_allocated is not None and epoch_reserved is not None:
+                    epoch_allocated += torch.cuda.memory_allocated(device=self.device)
+                    epoch_reserved += torch.cuda.memory_reserved(device=self.device)
 
             epoch_train_loss /= n_batches
             epoch_train_acc /= n_samples
             epoch_test_loss, epoch_test_acc = self.evaluate(
                 self.eval_dataloader
             ).values()
+            if epoch_allocated is not None and epoch_reserved is not None:
+                epoch_allocated /= n_batches
+                epoch_reserved /= n_batches
 
             metrics["train_losses"].append(epoch_train_loss)
             metrics["test_losses"].append(epoch_test_loss)
@@ -104,7 +132,7 @@ class Trainer:
             )
 
             if print_info:
-                self._epoch_print(epoch + 1, metrics)
+                self._epoch_print(epoch + 1, metrics, epoch_allocated, epoch_reserved)
 
             if self.path is not None and self.save_weights:
                 self._write_trajectory(epoch + 1, verbose=print_info)
@@ -122,31 +150,41 @@ class Trainer:
             self.model.eval()
 
             n_batches = len(dataloader)
-            n_samples = sum(batch[1].size(0) for batch in dataloader)
+            n_samples = 0
             net_loss = 0
             net_correct = 0
 
             for inputs, labels in dataloader:
-                inputs = inputs.to(self.device, non_blocking=True)
-                labels = labels.to(self.device, non_blocking=True)
+                inputs, labels = self.to_method(inputs, labels)
 
                 logits = self.model(inputs).get("logits")
                 loss = self.loss_fn(logits, labels)
                 net_loss += loss.item()
                 net_correct += self._compute_correct(logits, labels)
+                n_samples += labels.size(0)
 
             eval_loss = net_loss / n_batches
             eval_acc = net_correct / n_samples
-
             return {"eval_loss": eval_loss, "eval_acc": eval_acc}
 
     def _compute_correct(self, logits: torch.Tensor, labels: torch.Tensor) -> float:
         correct = torch.argmax(logits, dim=-1).eq(labels).sum()
         return correct.item()
 
-    def _epoch_print(self, epoch: int, metrics: Dict[str, List[float]]) -> None:
+    def _epoch_print(
+        self,
+        epoch: int,
+        metrics: Dict[str, List[float]],
+        allocated: Optional[float] = None,
+        reserved: Optional[float] = None,
+    ) -> None:
+        profile_str = (
+            f"\n(gpu memory profile): (allocated: {allocated // 1.024e6} MB, reserved: {reserved // 1.024e6} MB)"
+            if allocated is not None and reserved is not None
+            else ""
+        )
         print(
-            f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {metrics['train_accs'][-1]:.4f}, test acc: {metrics['test_accs'][-1]:.4f})"
+            f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){profile_str}"
         )
 
     def _write_trajectory(self, epoch: int, verbose: bool = False) -> None:
