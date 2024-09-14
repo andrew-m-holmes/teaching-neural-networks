@@ -22,7 +22,9 @@ class Trainer:
         unpack_inputs: bool = False,
         save_weights: bool = True,
         device: Optional[str] = None,
-        to_method: Optional[Callable[..., Tuple[Any, Any]]] = None,
+        pin_memory: bool = False,
+        non_blocking: bool = False,
+        to_fn: Optional[Callable[..., Tuple[Any, Any]]] = None,
         path: Optional[str] = None,
         verbose: Optional[Union[bool, int]] = None,
         profile: bool = False,
@@ -35,10 +37,10 @@ class Trainer:
                 else "mps" if torch.backends.mps.is_available() else "cpu"
             )
 
-        if to_method is None:
-            to_method = lambda inputs, labels: (
-                inputs.to(device=device, non_blocking=True),
-                labels.to(device=device, non_blocking=True),
+        if to_fn is None:
+            to_fn = lambda inputs, labels, device, non_blocking: (
+                inputs.to(device=device, non_blocking=non_blocking),
+                labels.to(device=device, non_blocking=non_blocking),
             )
 
         if not verbose or verbose < 0:
@@ -55,7 +57,9 @@ class Trainer:
         self.unpack_inputs = unpack_inputs
         self.save_weights = save_weights
         self.device = device
-        self.to_method = to_method
+        self.pin_memory = pin_memory
+        self.non_blocking = non_blocking
+        self.to_fn = to_fn
         self.path = path
         self.verbose = verbose
         self.profile = profile
@@ -65,7 +69,7 @@ class Trainer:
             dirname = os.path.dirname(self.path)
             os.makedirs(dirname, exist_ok=True)
 
-        self.model.to(self.device)
+        self.model.to(self.device, non_blocking=self.non_blocking)
         if self.verbose:
             print(f"model using {self.device}")
 
@@ -92,7 +96,12 @@ class Trainer:
 
             self.model.train()
             for inputs, labels in self.dataloader:
-                inputs, labels = self.to_method(inputs, labels)
+                inputs, labels = self.to_fn(
+                    inputs,
+                    labels,
+                    device=self.device,
+                    non_blocking=self.non_blocking,
+                )
 
                 self.optim.zero_grad()
                 logits = (
@@ -155,9 +164,16 @@ class Trainer:
             net_correct = 0
 
             for inputs, labels in dataloader:
-                inputs, labels = self.to_method(inputs, labels)
+                inputs, labels = self.to_fn(
+                    inputs, labels, self.device, self.non_blocking
+                )
 
-                logits = self.model(inputs).get("logits")
+                logits = (
+                    self.model(**inputs).get("logits")
+                    if self.unpack_inputs
+                    else self.model(inputs).get("logits")
+                )
+
                 loss = self.loss_fn(logits, labels)
                 net_loss += loss.item()
                 net_correct += self._compute_correct(logits, labels)
@@ -179,7 +195,7 @@ class Trainer:
         reserved: Optional[float] = None,
     ) -> None:
         profile_str = (
-            f"\n(gpu memory profile): (allocated: {allocated // 1.024e6} MB, reserved: {reserved // 1.024e6} MB)"
+            f"\n(gpu memory profile): (average allocated: {allocated // 1.024e6} MB, average reserved: {reserved // 1.024e6} MB)"
             if allocated is not None and reserved is not None
             else ""
         )
