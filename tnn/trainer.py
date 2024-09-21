@@ -3,8 +3,11 @@ import h5py
 import tnn
 import torch
 import torch.utils.data as data
+import time
 import numpy as np
 
+from torch.optim.lr_scheduler import LRScheduler
+from datetime import timedelta
 from .model import Model
 from typing import Union, List, Callable, Optional, Dict, Tuple, Any
 
@@ -18,6 +21,7 @@ class Trainer:
         loss_fn: Callable[..., torch.Tensor],
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
+        scheduler: Optional[LRScheduler] = None,
         epochs: int = 100,
         unpack_inputs: bool = False,
         save_weights: bool = True,
@@ -37,6 +41,10 @@ class Trainer:
                 else "mps" if torch.backends.mps.is_available() else "cpu"
             )
 
+        if device != "cuda":
+            pin_memory = False
+            non_blocking = False
+
         if to_fn is None:
             to_fn = lambda inputs, labels, device, non_blocking: (
                 inputs.to(device=device, non_blocking=non_blocking),
@@ -53,6 +61,7 @@ class Trainer:
         self.loss_fn = loss_fn
         self.dataloader = dataloader
         self.eval_dataloader = eval_dataloader
+        self.scheduler = scheduler
         self.epochs = epochs
         self.unpack_inputs = unpack_inputs
         self.save_weights = save_weights
@@ -72,6 +81,8 @@ class Trainer:
         self.model.to(self.device, non_blocking=self.non_blocking)
         if self.verbose:
             print(f"model using {self.device}")
+        if self.device != "cuda" and self.profile:
+            print(f"cannot profile, profile only enabled for cuda")
 
         n_batches = len(self.dataloader)
         metrics = {
@@ -79,8 +90,9 @@ class Trainer:
             "test_losses": [],
             "train_accs": [],
             "test_accs": [],
+            "epoch_times": [],
         }
-        epoch_allocated, epoch_reserved = None, None
+        epoch_allocated, epoch_reserved, start_time = None, None, None
 
         if self.path is not None and self.save_weights:
             self._write_trajectory(epoch=0, verbose=bool(self.verbose))
@@ -89,18 +101,18 @@ class Trainer:
             print("training started")
 
         for epoch in range(self.epochs):
+            epoch_start_time = time.time()
+            if start_time is None:
+                start_time = epoch_start_time
             epoch_train_loss, epoch_train_acc, n_samples = 0, 0, 0
 
-            if self.profile is not None:
+            if self.profile is not None and self.device == "cuda":
                 epoch_allocated, epoch_reserved = 0, 0
 
             self.model.train()
             for inputs, labels in self.dataloader:
                 inputs, labels = self.to_fn(
-                    inputs,
-                    labels,
-                    device=self.device,
-                    non_blocking=self.non_blocking,
+                    inputs, labels, device=self.device, non_blocking=self.non_blocking
                 )
 
                 self.optim.zero_grad()
@@ -130,10 +142,17 @@ class Trainer:
                 epoch_allocated /= n_batches
                 epoch_reserved /= n_batches
 
+            if self.scheduler is not None:
+                self.scheduler.step(epoch_test_loss)
+
+            epoch_end_time = time.time()
+            epoch_duration = epoch_end_time - epoch_start_time
+            total_duration = epoch_end_time - start_time
             metrics["train_losses"].append(epoch_train_loss)
             metrics["test_losses"].append(epoch_test_loss)
             metrics["train_accs"].append(epoch_train_acc)
             metrics["test_accs"].append(epoch_test_acc)
+            metrics["epoch_times"].append(epoch_duration)
 
             print_info = bool(
                 self.verbose
@@ -141,7 +160,14 @@ class Trainer:
             )
 
             if print_info:
-                self._epoch_print(epoch + 1, metrics, epoch_allocated, epoch_reserved)
+                self._epoch_print(
+                    epoch + 1,
+                    epoch_duration,
+                    total_duration,
+                    metrics,
+                    epoch_allocated,
+                    epoch_reserved,
+                )
 
             if self.path is not None and self.save_weights:
                 self._write_trajectory(epoch + 1, verbose=print_info)
@@ -190,6 +216,8 @@ class Trainer:
     def _epoch_print(
         self,
         epoch: int,
+        epoch_duration: float,
+        total_duration: float,
         metrics: Dict[str, List[float]],
         allocated: Optional[float] = None,
         reserved: Optional[float] = None,
@@ -199,8 +227,20 @@ class Trainer:
             if allocated is not None and reserved is not None
             else ""
         )
+
+        epoch_time_str = str(timedelta(seconds=int(epoch_duration)))
+        elapsed_time_str = str(timedelta(seconds=int(total_duration)))
+
+        time_str = f"\n(duration info): (epoch duration: {epoch_time_str}, elapsed time: {elapsed_time_str})"
+
+        lr_str = (
+            f"\n(learning rate: {self.scheduler.get_lr():.4f})"
+            if self.scheduler is not None
+            else ""
+        )
+
         print(
-            f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){profile_str}"
+            f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){lr_str}{profile_str}{time_str}"
         )
 
     def _write_trajectory(self, epoch: int, verbose: bool = False) -> None:

@@ -74,6 +74,8 @@ class BertForClassification(Model):
         self.linear = nn.Linear(hidden_size, classes)
 
     def forward(self, **kwargs) -> Dict[str, Any]:
-        cls_hidden_state = self.bert(**kwargs).pooler_output
+        outputs = self.bert(**kwargs)
+        cls_hidden_state = outputs.pooler_output
+
         logits = self.linear(cls_hidden_state)
-        return {"logits": logits}
+        return {"logits": logits, "outputs": outputs}
