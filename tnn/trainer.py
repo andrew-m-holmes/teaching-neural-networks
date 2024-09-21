@@ -106,7 +106,7 @@ class Trainer:
                 start_time = epoch_start_time
             epoch_train_loss, epoch_train_acc, n_samples = 0, 0, 0
 
-            if self.profile is not None and self.device == "cuda":
+            if self.profile and self.device == "cuda":
                 epoch_allocated, epoch_reserved = 0, 0
 
             self.model.train()
@@ -234,7 +234,7 @@ class Trainer:
         time_str = f"\n(duration info): (epoch duration: {epoch_time_str}, elapsed time: {elapsed_time_str})"
 
         lr_str = (
-            f"\n(learning rate: {self.scheduler.get_lr():.4f})"
+            f"\n(learning rate: {self.optim.param_groups[0]["lr"]:.1e})"
             if self.scheduler is not None
             else ""
         )
