@@ -72,10 +72,10 @@ class BertForClassification(Model):
         super().__init__()
         self.bert = BertModel.from_pretrained(name)
         self.linear = nn.Linear(hidden_size, classes)
+        self.norm = nn.LayerNorm(hidden_size)
 
     def forward(self, **kwargs) -> Dict[str, Any]:
         outputs = self.bert(**kwargs)
-        cls_hidden_state = outputs.pooler_output
-
+        cls_hidden_state = self.norm(outputs.pooler_output)
         logits = self.linear(cls_hidden_state)
         return {"logits": logits, "outputs": outputs}
