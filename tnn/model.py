@@ -16,14 +16,18 @@ class Model(nn.Module):
         raise NotImplementedError
 
     def get_flat_weights(self) -> np.ndarray:
-        return torch.cat(
+        device = next(self.parameters()).device
+        self.cpu()
+        weights = torch.cat(
             [
-                p.cpu().detach().clone().flatten()
+                p.detach().clone().flatten()
                 for p in self.parameters()
                 if p.requires_grad
             ],
             dim=0,
         ).numpy()
+        self.to(device)
+        return weights
 
     def load_flat_weights(self, weights: np.ndarray) -> None:
         i = 0
@@ -59,23 +63,3 @@ class MLP(Model):
         x = self.norm_3(self.linear_3(x))
         x = self.linear_4(f.relu(x))
         return {"logits": x}
-
-
-class BertForClassification(Model):
-
-    def __init__(
-        self,
-        classes: int,
-        hidden_size: int,
-        name: str = "google-bert/bert-base-uncased",
-    ) -> None:
-        super().__init__()
-        self.bert = BertModel.from_pretrained(name)
-        self.linear = nn.Linear(hidden_size, classes)
-        self.norm = nn.LayerNorm(hidden_size)
-
-    def forward(self, **kwargs) -> Dict[str, Any]:
-        outputs = self.bert(**kwargs)
-        cls_hidden_state = self.norm(outputs.pooler_output)
-        logits = self.linear(cls_hidden_state)
-        return {"logits": logits, "outputs": outputs}
