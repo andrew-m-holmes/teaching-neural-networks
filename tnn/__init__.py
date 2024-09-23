@@ -3,7 +3,7 @@ import numpy as np
 
 from .trainer import Trainer
 from .landscape import Landscape
-from .model import Model, MLP, BertForClassification
+from .model import Model
 from .plot import *
 from typing import Union
 
