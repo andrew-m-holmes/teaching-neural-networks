@@ -2,59 +2,40 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-PATH = "../images"
 
+def animate_gradient_descent(learning_rate, start_point, num_steps):
+    # Set up the plot
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111)
+    ax.set_xlabel("Parameter")
+    ax.set_ylabel("Loss")
+    ax.set_title(f"Gradient Descent Animation (Learning Rate: {learning_rate})")
+    x = np.linspace(-6, 6, 100)
+    y = x**2
+    ax.plot(x, y, "b-", lw=2)
 
-# Parabola loss function and its derivative
-def loss(x):
-    return x**2
+    # Initialize the point
+    scatter = ax.scatter([], [], color="red")
 
+    # Variables for gradient descent
+    parameter = start_point
 
-def grad(x):
-    return 2 * x
-
-
-def animate_learning_rate(learning_rate, ax, color):
-    x = 10  # Initial parameter value
-    xs, losses = [], []
-
-    for _ in range(100):  # Simulate 100 steps
-        xs.append(x)
-        losses.append(loss(x))
-        x -= learning_rate * grad(x)
-        if abs(x) > 50:  # Stop if it diverges
-            break
-
-    # Plot the loss curve
-    (line,) = ax.plot([], [], color=color, lw=2)
-
+    # Update function for animation
     def update(frame):
-        line.set_data(xs[:frame], losses[:frame])
-        return (line,)
+        nonlocal parameter
+        scatter._offset2d = ([parameter], [parameter**2])
+        gradient = 2 * parameter
+        parameter = parameter - learning_rate * gradient
+        return (scatter,)
 
-    return update, len(xs)
+    anim = FuncAnimation(fig, update, frames=num_steps, interval=100, blit=True)
 
-
-def main():
-    fig, ax = plt.subplots()
-    ax.set_xlim(-10, 10)
-    ax.set_ylim(0, 100)
-
-    # Learning rates
-    learning_rates = [0.01, 0.1, 1.5, 0.3]
-    colors = ["blue", "green", "red", "purple"]
-    labels = ["Slow", "Good", "Diverging", "Oscillating"]
-
-    animators = []
-    for lr, color, label in zip(learning_rates, colors, labels):
-        ax.set_title(f"Learning Rate: {label}")
-        update_func, frames = animate_learning_rate(lr, ax, color)
-        anim = FuncAnimation(fig, update_func, frames=frames, blit=True)
-        animators.append(anim)
-
-    for lr, anim in zip(learning_rates, animators):
-        anim.save(f"{PATH}/learning-rate-{lr}.gif", writer="pillow", fps=5)
+    # Save the animation
+    anim.save(f"learning-rate-{learning_rate}.gif", writer="pillow", fps=30)
+    plt.close(fig)
 
 
-if __name__ == "__main__":
-    main()
+# Example usage
+animate_gradient_descent(learning_rate=0.1, start_point=5, num_steps=50)
+animate_gradient_descent(learning_rate=0.01, start_point=5, num_steps=50)
+animate_gradient_descent(learning_rate=0.5, start_point=5, num_steps=50)
