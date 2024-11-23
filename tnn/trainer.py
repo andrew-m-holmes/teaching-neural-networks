@@ -2,13 +2,13 @@ import os
 import h5py
 import tnn
 import torch
+import torch.nn as nn
 import torch.utils.data as data
 import time
 import numpy as np
 
 from torch.optim.lr_scheduler import LRScheduler
 from datetime import timedelta
-from .model import Model
 from typing import Union, List, Callable, Optional, Dict, Tuple, Any
 
 
@@ -16,7 +16,7 @@ class Trainer:
 
     def __init__(
         self,
-        model: Model,
+        model: nn.Module,
         optim: torch.optim.Optimizer,
         loss_fn: Callable[..., torch.Tensor],
         dataloader: data.DataLoader,
