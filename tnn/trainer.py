@@ -24,7 +24,6 @@ class Trainer:
         scheduler: Optional[LRScheduler] = None,
         epochs: int = 100,
         unpack_inputs: bool = False,
-        save_weights: bool = True,
         device: Optional[str] = None,
         pin_memory: bool = False,
         non_blocking: bool = False,
@@ -64,7 +63,6 @@ class Trainer:
         self.scheduler = scheduler
         self.epochs = epochs
         self.unpack_inputs = unpack_inputs
-        self.save_weights = save_weights
         self.device = device
         self.pin_memory = pin_memory
         self.non_blocking = non_blocking
@@ -93,9 +91,6 @@ class Trainer:
             "epoch_times": [],
         }
         epoch_allocated, epoch_reserved, start_time = None, None, None
-
-        if self.path is not None and self.save_weights:
-            self._write_trajectory(epoch=0, verbose=bool(self.verbose))
 
         if self.verbose:
             print("training started")
@@ -169,9 +164,6 @@ class Trainer:
                     epoch_reserved,
                 )
 
-            if self.path is not None and self.save_weights:
-                self._write_trajectory(epoch + 1, verbose=print_info)
-
         if self.verbose:
             print("training complete")
 
@@ -185,7 +177,7 @@ class Trainer:
             self.model.eval()
 
             n_batches = len(dataloader)
-            n_samples = 0
+            n_samples = sum([labels.size(0) for _, labels in dataloader])
             net_loss = 0
             net_correct = 0
 
@@ -201,9 +193,9 @@ class Trainer:
                 )
 
                 loss = self.loss_fn(logits, labels)
+                correct = self._compute_correct(logits, labels)
                 net_loss += loss.item()
-                net_correct += self._compute_correct(logits, labels)
-                n_samples += labels.size(0)
+                net_correct += correct
 
             eval_loss = net_loss / n_batches
             eval_acc = net_correct / n_samples
@@ -242,24 +234,6 @@ class Trainer:
         print(
             f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){lr_str}{profile_str}{time_str}"
         )
-
-    def _write_trajectory(self, epoch: int, verbose: bool = False) -> None:
-        if self.path is None:
-            raise RuntimeError("'path' is None")
-
-        weights = self.model.get_flat_weights()
-        with h5py.File(self.path, mode="a") as file:
-            if not epoch:
-                trajectory_group = tnn._get_group("trajectory", file, clear=True)
-            else:
-                trajectory_group = tnn._get_group("trajectory", file, clear=False)
-
-            if verbose:
-                print(f"weights saved to {self.path}/trajectory/weights-epoch-{epoch}")
-
-            trajectory_group.create_dataset(
-                name=f"weights-epoch-{epoch}", data=weights, dtype=np.float32
-            )
 
     def _write_metrics(
         self, metrics: Dict[str, List[float]], verbose: bool = False
