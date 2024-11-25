@@ -27,8 +27,7 @@ def plot_metrics(
 
     default_linestyle = "-"
     func = min if use_min else max
-    best_metric = func(metrics, key=lambda item: item[1][-1])
-
+    best_metric = func(metrics.items(), key=lambda item: item[1][-1])[0]
     for (metric_name, values), color in zip(metrics.items(), colors):
         linestyle = best_linestyle if metric_name == best_metric else default_linestyle
         epochs = range(1, len(values) + 1)
