@@ -21,7 +21,6 @@ class Trainer:
         loss_fn: Callable[..., torch.Tensor],
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
-        scheduler: Optional[LRScheduler] = None,
         epochs: int = 100,
         unpack_inputs: bool = False,
         device: Optional[str] = None,
@@ -60,7 +59,6 @@ class Trainer:
         self.loss_fn = loss_fn
         self.dataloader = dataloader
         self.eval_dataloader = eval_dataloader
-        self.scheduler = scheduler
         self.epochs = epochs
         self.unpack_inputs = unpack_inputs
         self.device = device
@@ -136,9 +134,6 @@ class Trainer:
             if epoch_allocated is not None and epoch_reserved is not None:
                 epoch_allocated /= n_batches
                 epoch_reserved /= n_batches
-
-            if self.scheduler is not None:
-                self.scheduler.step(epoch_test_loss)
 
             epoch_end_time = time.time()
             epoch_duration = epoch_end_time - epoch_start_time
@@ -225,14 +220,8 @@ class Trainer:
 
         time_str = f"\n(duration info): (epoch duration: {epoch_time_str}, elapsed time: {elapsed_time_str})"
 
-        lr_str = (
-            f"\n(learning rate: {self.optim.param_groups[0]["lr"]:.1e})"
-            if self.scheduler is not None
-            else ""
-        )
-
         print(
-            f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){lr_str}{profile_str}{time_str}"
+            f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){profile_str}{time_str}"
         )
 
     def _write_metrics(
