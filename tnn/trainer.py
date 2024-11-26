@@ -7,7 +7,6 @@ import torch.utils.data as data
 import time
 import numpy as np
 
-from torch.optim.lr_scheduler import LRScheduler
 from datetime import timedelta
 from typing import Union, List, Callable, Optional, Dict, Tuple, Any
 
@@ -22,6 +21,7 @@ class Trainer:
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
         epochs: int = 100,
+        store_iter_metrics: bool = False,
         unpack_inputs: bool = False,
         device: Optional[str] = None,
         pin_memory: bool = False,
@@ -60,6 +60,7 @@ class Trainer:
         self.dataloader = dataloader
         self.eval_dataloader = eval_dataloader
         self.epochs = epochs
+        self.store_iter_metrics = store_iter_metrics
         self.unpack_inputs = unpack_inputs
         self.device = device
         self.pin_memory = pin_memory
@@ -81,6 +82,7 @@ class Trainer:
             print(f"cannot profile, profile only enabled for cuda")
 
         n_batches = len(self.dataloader)
+        n_samples = sum([labels.size(0) for _, labels in self.dataloader])
         metrics = {
             "train_losses": [],
             "test_losses": [],
@@ -88,22 +90,30 @@ class Trainer:
             "test_accs": [],
             "epoch_times": [],
         }
-        epoch_allocated, epoch_reserved, start_time = None, None, None
+        if self.store_iter_metrics:
+            metrics["iter_train_losses"] = []
+            metrics["iter_test_losses"] = []
+            metrics["iter_train_accs"] = []
+            metrics["iter_test_accs"] = []
+            metrics["iter_times"] = []
 
         if self.verbose:
             print("training started")
+
+        allocated, reserved, start_time = None, None, time.time()
 
         for epoch in range(self.epochs):
             epoch_start_time = time.time()
             if start_time is None:
                 start_time = epoch_start_time
-            epoch_train_loss, epoch_train_acc, n_samples = 0, 0, 0
+            epoch_train_loss, epoch_train_acc = 0, 0
 
             if self.profile and self.device == "cuda":
-                epoch_allocated, epoch_reserved = 0, 0
+                allocated, reserved = 0, 0
 
             self.model.train()
             for inputs, labels in self.dataloader:
+                iter_start_time = time.time()
                 inputs, labels = self.to_fn(
                     inputs, labels, device=self.device, non_blocking=self.non_blocking
                 )
@@ -119,25 +129,41 @@ class Trainer:
                 self.optim.step()
 
                 epoch_train_loss += loss.item()
-                epoch_train_acc += self._compute_correct(logits, labels)
-                n_samples += labels.size(0)
+                correct = self._compute_correct(logits, labels)
+                epoch_train_acc += correct
+                iter_end_time = time.time()
 
-                if epoch_allocated is not None and epoch_reserved is not None:
-                    epoch_allocated += torch.cuda.memory_allocated(device=self.device)
-                    epoch_reserved += torch.cuda.memory_reserved(device=self.device)
+                if self.store_iter_metrics:
+                    iter_train_acc = correct / labels.size(0)
+                    iter_test_loss, iter_test_acc = self.evaluate(
+                        self.eval_dataloader
+                    ).values()
+                    iter_duration = iter_start_time - iter_end_time
+
+                    metrics["iter_train_losses"].append(loss)
+                    metrics["iter_test_losses"].append(iter_test_loss)
+                    metrics["iter_train_accs"].append(iter_train_acc)
+                    metrics["iter_test_accs"].append(iter_test_acc)
+                    metrics["iter_times"].append(iter_duration)
+
+                if allocated is not None and reserved is not None:
+                    allocated += torch.cuda.memory_allocated(device=self.device)
+                    reserved += torch.cuda.memory_reserved(device=self.device)
 
             epoch_train_loss /= n_batches
             epoch_train_acc /= n_samples
             epoch_test_loss, epoch_test_acc = self.evaluate(
                 self.eval_dataloader
             ).values()
-            if epoch_allocated is not None and epoch_reserved is not None:
-                epoch_allocated /= n_batches
-                epoch_reserved /= n_batches
+
+            if allocated is not None and reserved is not None:
+                allocated /= n_batches
+                reserved /= n_batches
 
             epoch_end_time = time.time()
             epoch_duration = epoch_end_time - epoch_start_time
             total_duration = epoch_end_time - start_time
+
             metrics["train_losses"].append(epoch_train_loss)
             metrics["test_losses"].append(epoch_test_loss)
             metrics["train_accs"].append(epoch_train_acc)
@@ -155,8 +181,8 @@ class Trainer:
                     epoch_duration,
                     total_duration,
                     metrics,
-                    epoch_allocated,
-                    epoch_reserved,
+                    allocated,
+                    reserved,
                 )
 
         if self.verbose:
