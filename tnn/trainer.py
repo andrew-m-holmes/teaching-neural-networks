@@ -100,12 +100,10 @@ class Trainer:
         if self.verbose:
             print("training started")
 
-        allocated, reserved, start_time = None, None, time.time()
+        allocated, reserved, train_start_time = None, None, time.time()
 
         for epoch in range(self.epochs):
             epoch_start_time = time.time()
-            if start_time is None:
-                start_time = epoch_start_time
             epoch_train_loss, epoch_train_acc = 0, 0
 
             if self.profile and self.device == "cuda":
@@ -162,7 +160,7 @@ class Trainer:
 
             epoch_end_time = time.time()
             epoch_duration = epoch_end_time - epoch_start_time
-            total_duration = epoch_end_time - start_time
+            total_duration = epoch_end_time - train_start_time
 
             metrics["train_losses"].append(epoch_train_loss)
             metrics["test_losses"].append(epoch_test_loss)
