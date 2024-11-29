@@ -73,10 +73,11 @@ class Trainer:
         self.verbose = verbose
         self.profile = profile
 
-        path = os.path.dirname(f"{os.path.abspath(__file__)}/../training")
-        date = datetime.today() .strftime("%Y-%m-%d %H:%M:%S")
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "training")
+        date = datetime.today() .strftime("%Y-%m-%d:%H:%M:%S")
         log_file_prefix =f"{logger_name}-" if logger_name is not None else ""
-        logging.basicConfig(filename=f"{path}/{date}-{log_file_prefix}trainer-logs.txt", level=logging.INFO)
+        file_path = os.path.join(path, f"{date}-{log_file_prefix}trainer-logs.txt")
+        logging.basicConfig(filename=file_path, level=logging.INFO)
         self.logger = logging.getLogger(name=logger_name)
 
     def train(self) -> Dict[str, List[float]]:
@@ -141,7 +142,7 @@ class Trainer:
                 if self.store_update_metrics:
                     update_acc = correct / labels.size(0)
                     update_duration = update_start_time - update_end_time
-                    metrics["update_train_losses"].append(loss)
+                    metrics["update_train_losses"].append(loss.item())
                     metrics["update_train_accs"].append(update_acc)
                     metrics["update_times"].append(update_duration)
 
