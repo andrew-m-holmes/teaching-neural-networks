@@ -32,6 +32,7 @@ class Trainer:
         path: Optional[str] = None,
         verbose: Optional[Union[bool, int]] = None,
         profile: bool = False,
+        logger_name: Optional[str] = None,
     ) -> None:
 
         if device is None:
@@ -74,8 +75,9 @@ class Trainer:
 
         path = os.path.dirname(f"{os.path.abspath(__file__)}/../training")
         date = datetime.today() .strftime("%Y-%m-%d %H:%M:%S")
-        logging.basicConfig(filename=f"{path}/{date}-trainer-logs.txt", level=logging.INFO)
-        self.logger = logging.getLogger(name=__file__)
+        log_file_prefix =f"{logger_name}-" if logger_name is not None else ""
+        logging.basicConfig(filename=f"{path}/{date}-{log_file_prefix}trainer-logs.txt", level=logging.INFO)
+        self.logger = logging.getLogger(name=logger_name)
 
     def train(self) -> Dict[str, List[float]]:
         if self.path is not None:
