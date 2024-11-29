@@ -8,13 +8,9 @@ import time
 import numpy as np
 import logging
 
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Union, List, Callable, Optional, Dict, Tuple, Any
 
-
-PATH = os.path.dirname(os.path.abspath(__file__))
-logging.basicConfig(filename=f"{PATH}/trainer-logs.txt", level=logging.INFO)
-logger = logging.getLogger(name=__file__)
 
 
 class Trainer:
@@ -76,6 +72,11 @@ class Trainer:
         self.verbose = verbose
         self.profile = profile
 
+        path = os.path.dirname(f"{os.path.abspath(__file__)}/../training")
+        date = datetime.today() .strftime("%Y-%m-%d %H:%M:%S")
+        logging.basicConfig(filename=f"{path}/{date}-trainer-logs.txt", level=logging.INFO)
+        self.logger = logging.getLogger(name=__file__)
+
     def train(self) -> Dict[str, List[float]]:
         if self.path is not None:
             dirname = os.path.dirname(self.path)
@@ -83,9 +84,9 @@ class Trainer:
 
         self.model.to(self.device, non_blocking=self.non_blocking)
         if self.verbose:
-            logger.info(f"model using {self.device}")
+            self.logger.info(f"model using {self.device}")
         if self.device != "cuda" and self.profile:
-            logger.warning(f"cannot profile, profile only enabled for cuda")
+            self.logger.warning(f"cannot profile, profile only enabled for cuda")
 
         n_batches = len(self.dataloader)
         n_samples = sum([labels.size(0) for _, labels in self.dataloader])
@@ -102,7 +103,7 @@ class Trainer:
             metrics["update_times"] = []
 
         if self.verbose:
-            logger.info("training started")
+            self.logger.info("training started")
 
         allocated, reserved, train_start_time = None, None, time.time()
 
@@ -182,7 +183,7 @@ class Trainer:
                 )
 
         if self.verbose:
-            logger.info("training complete")
+            self.logger.info("training complete")
 
         if self.path is not None:
             self._write_metrics(metrics, verbose=bool(self.verbose))
@@ -242,7 +243,7 @@ class Trainer:
 
         time_str = f"\n(duration info): (epoch duration: {epoch_time_str}, elapsed time: {elapsed_time_str})"
 
-        logger.info(
+        self.logger.info(
             f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){profile_str}{time_str}"
         )
 
@@ -260,4 +261,4 @@ class Trainer:
                 )
 
                 if verbose:
-                    logger.info(f"{name} saved to {self.path}/metrics/{name}")
+                    self.logger.info(f"{name} saved to {self.path}/metrics/{name}")
