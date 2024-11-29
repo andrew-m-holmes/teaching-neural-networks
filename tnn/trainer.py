@@ -74,7 +74,7 @@ class Trainer:
         self.verbose = verbose
         self.profile = profile
 
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "training")
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
         date = datetime.today() .strftime("%Y-%m-%d:%H:%M:%S")
         log_file_prefix =f"{logger_name}-" if logger_name is not None else ""
         file_path = os.path.join(path, f"{date}-{log_file_prefix}trainer-logs.txt")
