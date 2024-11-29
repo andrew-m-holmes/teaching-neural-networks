@@ -6,9 +6,15 @@ import torch.nn as nn
 import torch.utils.data as data
 import time
 import numpy as np
+import logging
 
 from datetime import timedelta
 from typing import Union, List, Callable, Optional, Dict, Tuple, Any
+
+
+PATH = os.path.dirname(os.path.abspath(__file__))
+logging.basicConfig(filename=f"{PATH}/trainer-logs.txt", level=logging.INFO)
+logger = logging.getLogger(name=__file__)
 
 
 class Trainer:
@@ -21,7 +27,7 @@ class Trainer:
         dataloader: data.DataLoader,
         eval_dataloader: data.DataLoader,
         epochs: int = 100,
-        store_iter_metrics: bool = False,
+        store_update_metrics: bool = False,
         unpack_inputs: bool = False,
         device: Optional[str] = None,
         pin_memory: bool = False,
@@ -60,7 +66,7 @@ class Trainer:
         self.dataloader = dataloader
         self.eval_dataloader = eval_dataloader
         self.epochs = epochs
-        self.store_iter_metrics = store_iter_metrics
+        self.store_update_metrics = store_update_metrics
         self.unpack_inputs = unpack_inputs
         self.device = device
         self.pin_memory = pin_memory
@@ -77,9 +83,9 @@ class Trainer:
 
         self.model.to(self.device, non_blocking=self.non_blocking)
         if self.verbose:
-            print(f"model using {self.device}")
+            logger.info(f"model using {self.device}")
         if self.device != "cuda" and self.profile:
-            print(f"cannot profile, profile only enabled for cuda")
+            logger.warning(f"cannot profile, profile only enabled for cuda")
 
         n_batches = len(self.dataloader)
         n_samples = sum([labels.size(0) for _, labels in self.dataloader])
@@ -90,15 +96,13 @@ class Trainer:
             "test_accs": [],
             "epoch_times": [],
         }
-        if self.store_iter_metrics:
-            metrics["iter_train_losses"] = []
-            metrics["iter_test_losses"] = []
-            metrics["iter_train_accs"] = []
-            metrics["iter_test_accs"] = []
-            metrics["iter_times"] = []
+        if self.store_update_metrics:
+            metrics["update_train_losses"] = []
+            metrics["update_train_accs"] = []
+            metrics["update_times"] = []
 
         if self.verbose:
-            print("training started")
+            logger.info("training started")
 
         allocated, reserved, train_start_time = None, None, time.time()
 
@@ -111,7 +115,7 @@ class Trainer:
 
             self.model.train()
             for inputs, labels in self.dataloader:
-                iter_start_time = time.time()
+                update_start_time = time.time()
                 inputs, labels = self.to_fn(
                     inputs, labels, device=self.device, non_blocking=self.non_blocking
                 )
@@ -129,20 +133,14 @@ class Trainer:
                 epoch_train_loss += loss.item()
                 correct = self._compute_correct(logits, labels)
                 epoch_train_acc += correct
-                iter_end_time = time.time()
+                update_end_time = time.time()
 
-                if self.store_iter_metrics:
-                    iter_train_acc = correct / labels.size(0)
-                    iter_test_loss, iter_test_acc = self.evaluate(
-                        self.eval_dataloader
-                    ).values()
-                    iter_duration = iter_start_time - iter_end_time
-
-                    metrics["iter_train_losses"].append(loss)
-                    metrics["iter_test_losses"].append(iter_test_loss)
-                    metrics["iter_train_accs"].append(iter_train_acc)
-                    metrics["iter_test_accs"].append(iter_test_acc)
-                    metrics["iter_times"].append(iter_duration)
+                if self.store_update_metrics:
+                    update_acc = correct / labels.size(0)
+                    update_duration = update_start_time - update_end_time
+                    metrics["update_train_losses"].append(loss)
+                    metrics["update_train_accs"].append(update_acc)
+                    metrics["update_times"].append(update_duration)
 
                 if allocated is not None and reserved is not None:
                     allocated += torch.cuda.memory_allocated(device=self.device)
@@ -184,7 +182,7 @@ class Trainer:
                 )
 
         if self.verbose:
-            print("training complete")
+            logger.info("training complete")
 
         if self.path is not None:
             self._write_metrics(metrics, verbose=bool(self.verbose))
@@ -244,7 +242,7 @@ class Trainer:
 
         time_str = f"\n(duration info): (epoch duration: {epoch_time_str}, elapsed time: {elapsed_time_str})"
 
-        print(
+        logger.info(
             f"(epoch: {epoch}/{self.epochs}): (train loss: {metrics['train_losses'][-1]:.4f}, test loss: {metrics['test_losses'][-1]:.4f}, train acc: {(metrics['train_accs'][-1] * 100):.2f}%, test acc: {(metrics['test_accs'][-1] * 100):.2f}%){profile_str}{time_str}"
         )
 
@@ -262,4 +260,4 @@ class Trainer:
                 )
 
                 if verbose:
-                    print(f"{name} saved to {self.path}/metrics/{name}")
+                    logger.info(f"{name} saved to {self.path}/metrics/{name}")
