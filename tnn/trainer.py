@@ -1,4 +1,5 @@
 import os
+import sys
 import h5py
 import tnn
 import torch
@@ -77,8 +78,20 @@ class Trainer:
         date = datetime.today() .strftime("%Y-%m-%d:%H:%M:%S")
         log_file_prefix =f"{logger_name}-" if logger_name is not None else ""
         file_path = os.path.join(path, f"{date}-{log_file_prefix}trainer-logs.txt")
-        logging.basicConfig(filename=file_path, level=logging.INFO)
+
+        file_handler = logging.FileHandler(file_path)
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+
+        file_handler.setLevel(level=logging.INFO)
+        stdout_handler.setLevel(level=logging.INFO)
+        file_handler.setFormatter(formatter)
+        stdout_handler.setFormatter(formatter)
+
         self.logger = logging.getLogger(name=logger_name)
+        self.logger.setLevel(level=logging.INFO)
+        self.logger.addHandler(file_handler)
+        self.logger.addHandler(stdout_handler)
 
     def train(self) -> Dict[str, List[float]]:
         if self.path is not None:
