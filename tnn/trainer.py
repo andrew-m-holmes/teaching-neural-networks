@@ -13,7 +13,6 @@ from datetime import timedelta, datetime
 from typing import Union, List, Callable, Optional, Dict, Tuple, Any
 
 
-
 class Trainer:
 
     def __init__(
@@ -75,8 +74,10 @@ class Trainer:
         self.profile = profile
 
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
-        date = datetime.today() .strftime("%Y-%m-%d:%H:%M:%S")
-        log_file_prefix =f"{logger_name}-" if logger_name is not None else ""
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        date = datetime.today().strftime("%Y-%m-%d:%H:%M:%S")
+        log_file_prefix = f"{logger_name}-" if logger_name is not None else ""
         file_path = os.path.join(path, f"{date}-{log_file_prefix}trainer-logs.txt")
 
         file_handler = logging.FileHandler(file_path)
