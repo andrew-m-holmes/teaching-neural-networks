@@ -16,6 +16,7 @@ def plot_metrics(
     title: Optional[str] = None,
     xlabel: str = "epoch",
     ylabel: str = "loss",
+    x_ticks: Optional[List[int]] = None,
     figsize: Tuple[int, int] = (12, 8),
     show: bool = True,
     path: Optional[str] = None,
@@ -42,6 +43,9 @@ def plot_metrics(
 
     plt.xlabel(xlabel, fontsize=12)
     plt.ylabel(ylabel, fontsize=12)
+
+    if x_ticks is not None:
+        plt.xticks(x_ticks)
 
     if title:
         plt.title(title)
